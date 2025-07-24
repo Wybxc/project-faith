@@ -2,6 +2,7 @@ import { createSignal, For, onMount, Show, type Component } from 'solid-js';
 import { css } from '../styled-system/css';
 import { GameV1Api } from './api/game';
 import { AuthV1Api } from './api/auth';
+import Game from './Game';
 
 const Input: Component<{
   id: string;
@@ -97,53 +98,6 @@ const App: Component = () => {
       <Show when={api()} fallback={<Login setApi={setApi} />} keyed>
         {(api) => <Game api={api} />}
       </Show>
-    </div>
-  );
-};
-
-const Game: Component<{
-  api: GameV1Api;
-}> = (props) => {
-  const [messages, setMessages] = createSignal<string[]>([]);
-
-  onMount(() => {
-    props.api.enterGame().subscribe((event) => {
-      setMessages((prev) => [...prev, JSON.stringify(event)]);
-    });
-  });
-
-  return (
-    <div>
-      <h2>游戏</h2>
-      <div>
-        <For each={messages()}>
-          {(message) => (
-            <div
-              class={css({ padding: '0.5rem', borderBottom: '1px solid #ccc' })}
-            >
-              {message}
-            </div>
-          )}
-        </For>
-      </div>
-      <button
-        class={css({
-          padding: '0.5rem 1rem',
-          backgroundColor: '#28a745',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          _hover: {
-            backgroundColor: '#218838',
-          },
-        })}
-        onClick={async () => {
-          await props.api.ping();
-        }}
-      >
-        发送消息
-      </button>
     </div>
   );
 };
