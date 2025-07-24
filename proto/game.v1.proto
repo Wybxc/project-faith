@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package game.v1;
+
+service GameService {
+    rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+    rpc EnterGame(EnterGameRequest) returns (stream GameEvent);
+}
+
+message JoinRoomRequest {
+    string room_id = 1;
+}
+
+message JoinRoomResponse {
+    string message = 1;
+    bool success = 2;
+}
+
+message EnterGameRequest {
+    string room_id = 1;
+}
+
+message GameEvent {
+    string event_type = 1;
+    string data = 2;
+}
