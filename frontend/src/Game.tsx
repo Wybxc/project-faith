@@ -1,4 +1,10 @@
-import { type Component, createSignal, For, onMount } from 'solid-js';
+import {
+  type Component,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
 
@@ -7,11 +13,10 @@ const Game: Component<{
 }> = (props) => {
   const [messages, setMessages] = createSignal<string[]>([]);
 
-  onMount(() => {
-    props.api.enterGame().subscribe((event) => {
-      setMessages((prev) => [...prev, JSON.stringify(event)]);
-    });
+  const subscribe = props.api.enterGame().subscribe((event) => {
+    setMessages((prev) => [...prev, JSON.stringify(event)]);
   });
+  onCleanup(() => subscribe.unsubscribe());
 
   return (
     <div>
