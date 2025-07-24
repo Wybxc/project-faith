@@ -14,12 +14,13 @@ import { share } from "rxjs/operators";
 export const protobufPackage = "game.v1";
 
 export interface JoinRoomRequest {
-  roomId: string;
+  roomName: string;
 }
 
 export interface JoinRoomResponse {
   message: string;
   success: boolean;
+  roomId: string;
 }
 
 export interface EnterGameRequest {
@@ -31,14 +32,21 @@ export interface GameEvent {
   data: string;
 }
 
+export interface PingRequest {
+  roomId: string;
+}
+
+export interface PingResponse {
+}
+
 function createBaseJoinRoomRequest(): JoinRoomRequest {
-  return { roomId: "" };
+  return { roomName: "" };
 }
 
 export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
   encode(message: JoinRoomRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.roomId !== "") {
-      writer.uint32(10).string(message.roomId);
+    if (message.roomName !== "") {
+      writer.uint32(10).string(message.roomName);
     }
     return writer;
   },
@@ -55,7 +63,7 @@ export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
             break;
           }
 
-          message.roomId = reader.string();
+          message.roomName = reader.string();
           continue;
         }
       }
@@ -68,13 +76,13 @@ export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
   },
 
   fromJSON(object: any): JoinRoomRequest {
-    return { roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "" };
+    return { roomName: isSet(object.roomName) ? globalThis.String(object.roomName) : "" };
   },
 
   toJSON(message: JoinRoomRequest): unknown {
     const obj: any = {};
-    if (message.roomId !== "") {
-      obj.roomId = message.roomId;
+    if (message.roomName !== "") {
+      obj.roomName = message.roomName;
     }
     return obj;
   },
@@ -84,13 +92,13 @@ export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
   },
   fromPartial<I extends Exact<DeepPartial<JoinRoomRequest>, I>>(object: I): JoinRoomRequest {
     const message = createBaseJoinRoomRequest();
-    message.roomId = object.roomId ?? "";
+    message.roomName = object.roomName ?? "";
     return message;
   },
 };
 
 function createBaseJoinRoomResponse(): JoinRoomResponse {
-  return { message: "", success: false };
+  return { message: "", success: false, roomId: "" };
 }
 
 export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
@@ -100,6 +108,9 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     }
     if (message.success !== false) {
       writer.uint32(16).bool(message.success);
+    }
+    if (message.roomId !== "") {
+      writer.uint32(26).string(message.roomId);
     }
     return writer;
   },
@@ -127,6 +138,14 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
           message.success = reader.bool();
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.roomId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -140,6 +159,7 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     return {
       message: isSet(object.message) ? globalThis.String(object.message) : "",
       success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
+      roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "",
     };
   },
 
@@ -151,6 +171,9 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     if (message.success !== false) {
       obj.success = message.success;
     }
+    if (message.roomId !== "") {
+      obj.roomId = message.roomId;
+    }
     return obj;
   },
 
@@ -161,6 +184,7 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     const message = createBaseJoinRoomResponse();
     message.message = object.message ?? "";
     message.success = object.success ?? false;
+    message.roomId = object.roomId ?? "";
     return message;
   },
 };
@@ -299,9 +323,111 @@ export const GameEvent: MessageFns<GameEvent> = {
   },
 };
 
+function createBasePingRequest(): PingRequest {
+  return { roomId: "" };
+}
+
+export const PingRequest: MessageFns<PingRequest> = {
+  encode(message: PingRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.roomId !== "") {
+      writer.uint32(10).string(message.roomId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PingRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePingRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.roomId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PingRequest {
+    return { roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "" };
+  },
+
+  toJSON(message: PingRequest): unknown {
+    const obj: any = {};
+    if (message.roomId !== "") {
+      obj.roomId = message.roomId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PingRequest>, I>>(base?: I): PingRequest {
+    return PingRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PingRequest>, I>>(object: I): PingRequest {
+    const message = createBasePingRequest();
+    message.roomId = object.roomId ?? "";
+    return message;
+  },
+};
+
+function createBasePingResponse(): PingResponse {
+  return {};
+}
+
+export const PingResponse: MessageFns<PingResponse> = {
+  encode(_: PingResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PingResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePingResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): PingResponse {
+    return {};
+  },
+
+  toJSON(_: PingResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PingResponse>, I>>(base?: I): PingResponse {
+    return PingResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PingResponse>, I>>(_: I): PingResponse {
+    const message = createBasePingResponse();
+    return message;
+  },
+};
+
 export interface GameService {
   JoinRoom(request: DeepPartial<JoinRoomRequest>, metadata?: grpc.Metadata): Promise<JoinRoomResponse>;
   EnterGame(request: DeepPartial<EnterGameRequest>, metadata?: grpc.Metadata): Observable<GameEvent>;
+  Ping(request: DeepPartial<PingRequest>, metadata?: grpc.Metadata): Promise<PingResponse>;
 }
 
 export class GameServiceClientImpl implements GameService {
@@ -311,6 +437,7 @@ export class GameServiceClientImpl implements GameService {
     this.rpc = rpc;
     this.JoinRoom = this.JoinRoom.bind(this);
     this.EnterGame = this.EnterGame.bind(this);
+    this.Ping = this.Ping.bind(this);
   }
 
   JoinRoom(request: DeepPartial<JoinRoomRequest>, metadata?: grpc.Metadata): Promise<JoinRoomResponse> {
@@ -319,6 +446,10 @@ export class GameServiceClientImpl implements GameService {
 
   EnterGame(request: DeepPartial<EnterGameRequest>, metadata?: grpc.Metadata): Observable<GameEvent> {
     return this.rpc.invoke(GameServiceEnterGameDesc, EnterGameRequest.fromPartial(request), metadata);
+  }
+
+  Ping(request: DeepPartial<PingRequest>, metadata?: grpc.Metadata): Promise<PingResponse> {
+    return this.rpc.unary(GameServicePingDesc, PingRequest.fromPartial(request), metadata);
   }
 }
 
@@ -360,6 +491,29 @@ export const GameServiceEnterGameDesc: UnaryMethodDefinitionish = {
   responseType: {
     deserializeBinary(data: Uint8Array) {
       const value = GameEvent.decode(data);
+      return {
+        ...value,
+        toObject() {
+          return value;
+        },
+      };
+    },
+  } as any,
+};
+
+export const GameServicePingDesc: UnaryMethodDefinitionish = {
+  methodName: "Ping",
+  service: GameServiceDesc,
+  requestStream: false,
+  responseStream: false,
+  requestType: {
+    serializeBinary() {
+      return PingRequest.encode(this).finish();
+    },
+  } as any,
+  responseType: {
+    deserializeBinary(data: Uint8Array) {
+      const value = PingResponse.decode(data);
       return {
         ...value,
         toObject() {

@@ -5,15 +5,18 @@ package game.v1;
 service GameService {
     rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
     rpc EnterGame(EnterGameRequest) returns (stream GameEvent);
+
+    rpc Ping(PingRequest) returns (PingResponse);
 }
 
 message JoinRoomRequest {
-    string room_id = 1;
+    string room_name = 1;
 }
 
 message JoinRoomResponse {
     string message = 1;
     bool success = 2;
+    string room_id = 3;
 }
 
 message EnterGameRequest {
@@ -24,3 +27,9 @@ message GameEvent {
     string event_type = 1;
     string data = 2;
 }
+
+message PingRequest {
+    string room_id = 1;
+}
+
+message PingResponse {}
