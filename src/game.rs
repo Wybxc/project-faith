@@ -2,8 +2,9 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use base64::prelude::*;
 use futures::{Stream, StreamExt};
-use sharded_slab::Slab;
-use tokio::sync::{Mutex, broadcast};
+use parking_lot::{Mutex, RwLock};
+use sharded_slab::{Entry, Slab};
+use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
@@ -31,6 +32,12 @@ impl Game {
             .map_err(|_| Status::unauthenticated("Invalid token encoding"))?;
         Ok(username)
     }
+
+    fn room(&self, room_id: usize) -> Result<Entry<Room>, Status> {
+        self.rooms
+            .get(room_id)
+            .ok_or(Status::internal("Room not found"))
+    }
 }
 
 #[async_trait]
@@ -42,11 +49,21 @@ impl game_service_server::GameService for Game {
         let _username = self.auth(request.metadata())?;
 
         let room_name = request.into_inner().room_name;
-        let mut room_map = self.room_map.lock().await;
+        let mut room_map = self.room_map.lock();
         let room_id = *room_map.entry(room_name).or_insert_with(|| {
             let room = Room::new();
             self.rooms.insert(room).expect("Failed to insert room")
         });
+        let room = self.room(room_id)?;
+
+        let state = room.state.read();
+        match &*state {
+            RoomState::Playing => return Err(Status::failed_precondition("Room is full")),
+            RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
+            _ => {}
+        }
+        drop(state); // Release the read lock before acquiring a write lock
+        *room.state.write() = RoomState::Playing;
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
@@ -67,10 +84,7 @@ impl game_service_server::GameService for Game {
         let room_id = room_id
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
-        let room = self
-            .rooms
-            .get(room_id)
-            .ok_or(Status::internal("Room not found"))?;
+        let room = self.room(room_id)?;
 
         let events = room.sender.subscribe();
         let events = BroadcastStream::new(events)
@@ -87,10 +101,7 @@ impl game_service_server::GameService for Game {
         let room_id = room_id
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
-        let room = self
-            .rooms
-            .get(room_id)
-            .ok_or(Status::internal("Room not found"))?;
+        let room = self.room(room_id)?;
         room.sender
             .send(GameEvent {
                 event_type: "ping".to_string(),
@@ -104,11 +115,21 @@ impl game_service_server::GameService for Game {
 
 struct Room {
     sender: broadcast::Sender<GameEvent>,
+    state: RwLock<RoomState>,
 }
 
 impl Room {
     fn new() -> Self {
         let (sender, _) = broadcast::channel(128);
-        Self { sender }
+        Self {
+            sender,
+            state: RwLock::new(RoomState::Waiting),
+        }
     }
+}
+
+enum RoomState {
+    Waiting,
+    Playing,
+    Finished,
 }
