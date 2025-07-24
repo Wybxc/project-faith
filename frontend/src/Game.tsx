@@ -1,10 +1,4 @@
-import {
-  type Component,
-  createSignal,
-  For,
-  onCleanup,
-  onMount,
-} from 'solid-js';
+import { type Component, createSignal, For, onCleanup } from 'solid-js';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
 

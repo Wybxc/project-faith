@@ -2,13 +2,16 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use base64::prelude::*;
 use futures::{Stream, StreamExt};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use sharded_slab::{Entry, Slab};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
-use crate::grpc::*;
+use crate::{game::running::RunningGame, grpc::*};
+
+mod card;
+mod running;
 
 #[derive(Default)]
 pub struct Game {
@@ -46,24 +49,39 @@ impl game_service_server::GameService for Game {
         &self,
         request: Request<JoinRoomRequest>,
     ) -> Result<Response<crate::grpc::JoinRoomResponse>, Status> {
-        let _username = self.auth(request.metadata())?;
+        let username = self.auth(request.metadata())?;
 
         let room_name = request.into_inner().room_name;
         let mut room_map = self.room_map.lock();
-        let room_id = *room_map.entry(room_name).or_insert_with(|| {
-            let room = Room::new();
-            self.rooms.insert(room).expect("Failed to insert room")
-        });
+
+        // New room creation
+        if !room_map.contains_key(&room_name) {
+            let room = Room::new(username);
+            let room_id = self.rooms.insert(room).expect("Failed to insert room");
+            room_map.insert(room_name.clone(), room_id);
+            return Ok(Response::new(JoinRoomResponse {
+                message: format!("Created room: {room_name}"),
+                room_id: room_id.to_string(),
+                success: true,
+            }));
+        }
+
+        // Joining existing room
+        let room_id = *room_map
+            .get(&room_name)
+            .ok_or_else(|| Status::internal("Room not found in room map"))?;
         let room = self.room(room_id)?;
 
-        let state = room.state.read();
-        match &*state {
-            RoomState::Playing => return Err(Status::failed_precondition("Room is full")),
+        let mut state = room.state.lock();
+        let p1_username = match &*state {
+            RoomState::Waiting { p1_username } if p1_username == &username => {
+                return Err(Status::failed_precondition("Already in the room"));
+            }
+            RoomState::Waiting { p1_username } => p1_username.clone(),
+            RoomState::Playing(..) => return Err(Status::failed_precondition("Room is full")),
             RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
-            _ => {}
-        }
-        drop(state); // Release the read lock before acquiring a write lock
-        *room.state.write() = RoomState::Playing;
+        };
+        *state = RoomState::Playing(RunningGame::new(p1_username, username));
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
@@ -94,7 +112,7 @@ impl game_service_server::GameService for Game {
     }
 
     async fn ping(&self, request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
-        let _username = self.auth(request.metadata())?;
+        let username = self.auth(request.metadata())?;
 
         let room_id = request.into_inner().room_id;
         tracing::debug!("Received ping for room ID: {}", room_id);
@@ -102,10 +120,16 @@ impl game_service_server::GameService for Game {
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
         let room = self.room(room_id)?;
+        let state = room.state.lock();
+
+        let RoomState::Playing(game) = &*state else {
+            return Err(Status::failed_precondition("Room is not in play"));
+        };
+        let game_state = game.to_client(game.is_player_one(&username));
+
         room.sender
             .send(GameEvent {
-                event_type: "ping".to_string(),
-                data: "Ping received".to_string(),
+                event_type: Some(game_event::EventType::StateUpdate(game_state)),
             })
             .map_err(|_| Status::internal("Failed to send ping event"))?;
 
@@ -115,21 +139,21 @@ impl game_service_server::GameService for Game {
 
 struct Room {
     sender: broadcast::Sender<GameEvent>,
-    state: RwLock<RoomState>,
+    state: Mutex<RoomState>,
 }
 
 impl Room {
-    fn new() -> Self {
+    fn new(p1_username: String) -> Self {
         let (sender, _) = broadcast::channel(128);
         Self {
             sender,
-            state: RwLock::new(RoomState::Waiting),
+            state: Mutex::new(RoomState::Waiting { p1_username }),
         }
     }
 }
 
 enum RoomState {
-    Waiting,
-    Playing,
+    Waiting { p1_username: String },
+    Playing(running::RunningGame),
     Finished,
 }

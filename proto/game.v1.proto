@@ -24,8 +24,9 @@ message EnterGameRequest {
 }
 
 message GameEvent {
-    string event_type = 1;
-    string data = 2;
+    oneof event_type {
+        GameState state_update = 1;
+    }
 }
 
 message PingRequest {
@@ -33,3 +34,8 @@ message PingRequest {
 }
 
 message PingResponse {}
+
+message GameState {
+    repeated uint32 self_hand = 1;
+    uint32 other_hand_count = 2;
+}

@@ -28,8 +28,7 @@ export interface EnterGameRequest {
 }
 
 export interface GameEvent {
-  eventType: string;
-  data: string;
+  stateUpdate?: GameState | undefined;
 }
 
 export interface PingRequest {
@@ -37,6 +36,11 @@ export interface PingRequest {
 }
 
 export interface PingResponse {
+}
+
+export interface GameState {
+  selfHand: number[];
+  otherHandCount: number;
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -248,16 +252,13 @@ export const EnterGameRequest: MessageFns<EnterGameRequest> = {
 };
 
 function createBaseGameEvent(): GameEvent {
-  return { eventType: "", data: "" };
+  return { stateUpdate: undefined };
 }
 
 export const GameEvent: MessageFns<GameEvent> = {
   encode(message: GameEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.eventType !== "") {
-      writer.uint32(10).string(message.eventType);
-    }
-    if (message.data !== "") {
-      writer.uint32(18).string(message.data);
+    if (message.stateUpdate !== undefined) {
+      GameState.encode(message.stateUpdate, writer.uint32(10).fork()).join();
     }
     return writer;
   },
@@ -274,15 +275,7 @@ export const GameEvent: MessageFns<GameEvent> = {
             break;
           }
 
-          message.eventType = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.data = reader.string();
+          message.stateUpdate = GameState.decode(reader, reader.uint32());
           continue;
         }
       }
@@ -295,19 +288,13 @@ export const GameEvent: MessageFns<GameEvent> = {
   },
 
   fromJSON(object: any): GameEvent {
-    return {
-      eventType: isSet(object.eventType) ? globalThis.String(object.eventType) : "",
-      data: isSet(object.data) ? globalThis.String(object.data) : "",
-    };
+    return { stateUpdate: isSet(object.stateUpdate) ? GameState.fromJSON(object.stateUpdate) : undefined };
   },
 
   toJSON(message: GameEvent): unknown {
     const obj: any = {};
-    if (message.eventType !== "") {
-      obj.eventType = message.eventType;
-    }
-    if (message.data !== "") {
-      obj.data = message.data;
+    if (message.stateUpdate !== undefined) {
+      obj.stateUpdate = GameState.toJSON(message.stateUpdate);
     }
     return obj;
   },
@@ -317,8 +304,9 @@ export const GameEvent: MessageFns<GameEvent> = {
   },
   fromPartial<I extends Exact<DeepPartial<GameEvent>, I>>(object: I): GameEvent {
     const message = createBaseGameEvent();
-    message.eventType = object.eventType ?? "";
-    message.data = object.data ?? "";
+    message.stateUpdate = (object.stateUpdate !== undefined && object.stateUpdate !== null)
+      ? GameState.fromPartial(object.stateUpdate)
+      : undefined;
     return message;
   },
 };
@@ -420,6 +408,94 @@ export const PingResponse: MessageFns<PingResponse> = {
   },
   fromPartial<I extends Exact<DeepPartial<PingResponse>, I>>(_: I): PingResponse {
     const message = createBasePingResponse();
+    return message;
+  },
+};
+
+function createBaseGameState(): GameState {
+  return { selfHand: [], otherHandCount: 0 };
+}
+
+export const GameState: MessageFns<GameState> = {
+  encode(message: GameState, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    writer.uint32(10).fork();
+    for (const v of message.selfHand) {
+      writer.uint32(v);
+    }
+    writer.join();
+    if (message.otherHandCount !== 0) {
+      writer.uint32(16).uint32(message.otherHandCount);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GameState {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGameState();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag === 8) {
+            message.selfHand.push(reader.uint32());
+
+            continue;
+          }
+
+          if (tag === 10) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.selfHand.push(reader.uint32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.otherHandCount = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GameState {
+    return {
+      selfHand: globalThis.Array.isArray(object?.selfHand) ? object.selfHand.map((e: any) => globalThis.Number(e)) : [],
+      otherHandCount: isSet(object.otherHandCount) ? globalThis.Number(object.otherHandCount) : 0,
+    };
+  },
+
+  toJSON(message: GameState): unknown {
+    const obj: any = {};
+    if (message.selfHand?.length) {
+      obj.selfHand = message.selfHand.map((e) => Math.round(e));
+    }
+    if (message.otherHandCount !== 0) {
+      obj.otherHandCount = Math.round(message.otherHandCount);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GameState>, I>>(base?: I): GameState {
+    return GameState.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GameState>, I>>(object: I): GameState {
+    const message = createBaseGameState();
+    message.selfHand = object.selfHand?.map((e) => e) || [];
+    message.otherHandCount = object.otherHandCount ?? 0;
     return message;
   },
 };
