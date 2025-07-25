@@ -3,7 +3,7 @@ use tokio::sync::broadcast;
 use tonic::Status;
 
 use crate::{
-    game::state::{GameState, PlayerId},
+    game::state::{Action, GameState, PlayerId},
     grpc::{GameEvent, game_event::EventType},
 };
 
@@ -61,6 +61,21 @@ impl Room {
                 event_type: Some(EventType::StateUpdate(p1_game_state)),
             })
             .map_err(|_| Status::internal("Failed to send initial game state"))?;
+        Ok(())
+    }
+
+    pub fn perform(&self, action: Action) -> Result<(), Status> {
+        let mut state = self.state.lock();
+        let RoomState::Playing(game) = &mut *state else {
+            return Err(Status::failed_precondition("Game not in progress"));
+        };
+        game.perform(action);
+        self.sync_game_state()?;
+        Ok(())
+    }
+
+    pub fn game_start(&self) -> Result<(), Status> {
+        self.perform(Action::Initalize)?;
         Ok(())
     }
 }

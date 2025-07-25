@@ -1,4 +1,7 @@
-use crate::{game::player::PlayerState, grpc};
+use crate::{
+    game::{card::CardId, player::PlayerState},
+    grpc,
+};
 
 pub struct GameState {
     players: (PlayerState, PlayerState),
@@ -52,12 +55,18 @@ impl GameState {
     }
 
     /// Applies an action to the game state.
-    pub fn reduce(&mut self, action: Action) {
+    pub fn perform(&mut self, action: Action) {
         match action {
-            Action::DrawCard(player) => {
+            Action::Initalize => {
+                self.players.0.initialize(vec![CardId(7001); 30]);
+                self.players.1.initialize(vec![CardId(7001); 30]);
+            }
+            Action::DrawCard(player, number) => {
                 let player_state = self.me_mut(player);
-                if let Some(card) = player_state.deck.pop() {
-                    player_state.hand.push(card);
+                for _ in 0..number {
+                    if let Some(card) = player_state.deck.pop() {
+                        player_state.hand.push(card);
+                    }
                 }
             }
         }
@@ -65,8 +74,11 @@ impl GameState {
 }
 
 pub enum Action {
-    /// Draw a card from the deck
-    DrawCard(PlayerId),
+    /// Initialize the game state.
+    Initalize,
+
+    /// Draw cards from the deck.
+    DrawCard(PlayerId, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

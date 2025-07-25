@@ -13,7 +13,12 @@ impl PlayerState {
         Self {
             username,
             hand: Vec::new(),
-            deck: vec![CardId(7001); 30], // Example deck with 30 cards
+            deck: Vec::new(),
         }
+    }
+
+    pub fn initialize(&mut self, deck: Vec<CardId>) {
+        self.hand.clear();
+        self.deck = deck;
     }
 }

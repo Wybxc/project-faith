@@ -99,6 +99,9 @@ impl game_service_server::GameService for Game {
         };
         *state = RoomState::Playing(GameState::new(p0_username, username.clone()));
         tracing::info!("Player {} joined room: {}", username, room_name);
+        drop(state); // Release the lock before sending
+
+        room.game_start()?;
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
