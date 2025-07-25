@@ -57,6 +57,30 @@ const Login: Component<{
   const [username, setUsername] = createSignal('');
   const [roomName, setRoomName] = createSignal('');
 
+  const onLogin = async () => {
+    const token = await new AuthV1Api().login(username());
+    if (!token) {
+      alert('登录失败，请检查用户名。');
+      return;
+    }
+    const api = new GameV1Api(token);
+    await api.joinRoom(roomName());
+    props.setApi(api);
+  };
+
+  // For debug purposes, auto-fill username and roomName from URL parameters
+  // This can be removed in production
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const usernameParam = params.get('username');
+    const roomNameParam = params.get('roomName');
+    if (usernameParam && roomNameParam) {
+      setUsername(usernameParam);
+      setRoomName(roomNameParam);
+      onLogin();
+    }
+  });
+
   return (
     <form
       class={css({
@@ -71,14 +95,7 @@ const Login: Component<{
       })}
       onSubmit={async (e) => {
         e.preventDefault();
-        const token = await new AuthV1Api().login(username());
-        if (!token) {
-          alert('登录失败，请检查用户名。');
-          return;
-        }
-        const api = new GameV1Api(token);
-        await api.joinRoom(roomName());
-        props.setApi(api);
+        await onLogin();
       }}
     >
       <label>用户名：</label>
