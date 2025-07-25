@@ -79,7 +79,6 @@ impl game_service_server::GameService for Game {
             .ok_or_else(|| Status::internal("Room not found in room map"))?;
         let room = self.room(room_id)?;
 
-
         if room.check_in_room(&username) {
             return Ok(Response::new(JoinRoomResponse {
                 message: "Already in the room".to_string(),
@@ -87,7 +86,7 @@ impl game_service_server::GameService for Game {
                 success: true,
             }));
         }
-        
+
         let mut state = room.state.lock();
         let p1_username = match &*state {
             RoomState::Waiting { p1_username } if p1_username == &username => {

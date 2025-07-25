@@ -11,6 +11,8 @@ const Game: Component<{
   const [state, setState] = createStore<GameState>({
     selfHand: [],
     otherHandCount: 0,
+    selfDeckCount: 0,
+    otherDeckCount: 0,
   });
 
   const subscribe = props.api.enterGame().subscribe((event) => {

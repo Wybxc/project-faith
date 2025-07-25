@@ -41,6 +41,8 @@ export interface PingResponse {
 export interface GameState {
   selfHand: number[];
   otherHandCount: number;
+  selfDeckCount: number;
+  otherDeckCount: number;
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -413,7 +415,7 @@ export const PingResponse: MessageFns<PingResponse> = {
 };
 
 function createBaseGameState(): GameState {
-  return { selfHand: [], otherHandCount: 0 };
+  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0 };
 }
 
 export const GameState: MessageFns<GameState> = {
@@ -425,6 +427,12 @@ export const GameState: MessageFns<GameState> = {
     writer.join();
     if (message.otherHandCount !== 0) {
       writer.uint32(16).uint32(message.otherHandCount);
+    }
+    if (message.selfDeckCount !== 0) {
+      writer.uint32(24).uint32(message.selfDeckCount);
+    }
+    if (message.otherDeckCount !== 0) {
+      writer.uint32(32).uint32(message.otherDeckCount);
     }
     return writer;
   },
@@ -462,6 +470,22 @@ export const GameState: MessageFns<GameState> = {
           message.otherHandCount = reader.uint32();
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.selfDeckCount = reader.uint32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.otherDeckCount = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -475,6 +499,8 @@ export const GameState: MessageFns<GameState> = {
     return {
       selfHand: globalThis.Array.isArray(object?.selfHand) ? object.selfHand.map((e: any) => globalThis.Number(e)) : [],
       otherHandCount: isSet(object.otherHandCount) ? globalThis.Number(object.otherHandCount) : 0,
+      selfDeckCount: isSet(object.selfDeckCount) ? globalThis.Number(object.selfDeckCount) : 0,
+      otherDeckCount: isSet(object.otherDeckCount) ? globalThis.Number(object.otherDeckCount) : 0,
     };
   },
 
@@ -486,6 +512,12 @@ export const GameState: MessageFns<GameState> = {
     if (message.otherHandCount !== 0) {
       obj.otherHandCount = Math.round(message.otherHandCount);
     }
+    if (message.selfDeckCount !== 0) {
+      obj.selfDeckCount = Math.round(message.selfDeckCount);
+    }
+    if (message.otherDeckCount !== 0) {
+      obj.otherDeckCount = Math.round(message.otherDeckCount);
+    }
     return obj;
   },
 
@@ -496,6 +528,8 @@ export const GameState: MessageFns<GameState> = {
     const message = createBaseGameState();
     message.selfHand = object.selfHand?.map((e) => e) || [];
     message.otherHandCount = object.otherHandCount ?? 0;
+    message.selfDeckCount = object.selfDeckCount ?? 0;
+    message.otherDeckCount = object.otherDeckCount ?? 0;
     return message;
   },
 };
