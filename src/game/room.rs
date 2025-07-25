@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use parking_lot::Mutex;
-use tokio::sync::broadcast;
+use tokio::{sync::broadcast, task::JoinHandle};
 use tonic::Status;
 
 use crate::{
@@ -51,16 +53,12 @@ impl Room {
         };
         let p0_game_state = game.to_client(PlayerId::Player0);
         let p1_game_state = game.to_client(PlayerId::Player1);
-        self.p0_sender
-            .send(GameEvent {
-                event_type: Some(EventType::StateUpdate(p0_game_state)),
-            })
-            .map_err(|_| Status::internal("Failed to send initial game state"))?;
-        self.p1_sender
-            .send(GameEvent {
-                event_type: Some(EventType::StateUpdate(p1_game_state)),
-            })
-            .map_err(|_| Status::internal("Failed to send initial game state"))?;
+        let _ = self.p0_sender.send(GameEvent {
+            event_type: Some(EventType::StateUpdate(p0_game_state)),
+        });
+        let _ = self.p1_sender.send(GameEvent {
+            event_type: Some(EventType::StateUpdate(p1_game_state)),
+        });
         Ok(())
     }
 
@@ -70,13 +68,22 @@ impl Room {
             return Err(Status::failed_precondition("Game not in progress"));
         };
         game.perform(action);
+        drop(state); // Release the lock before sending
+
         self.sync_game_state()?;
         Ok(())
     }
 
-    pub fn game_start(&self) -> Result<(), Status> {
-        self.perform(Action::Initalize)?;
-        Ok(())
+    pub fn game_start(self: Arc<Self>) -> JoinHandle<Result<(), Status>> {
+        tokio::spawn(async move {
+            self.perform(Action::Initalize)?;
+            loop {
+                self.perform(Action::DrawCard(PlayerId::Player0, 1))?;
+                self.perform(Action::DrawCard(PlayerId::Player1, 1))?;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                self.perform(Action::BumpRound)?;
+            }
+        })
     }
 }
 

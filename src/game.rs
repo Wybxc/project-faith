@@ -3,7 +3,7 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 use base64::prelude::*;
 use futures::{Stream, StreamExt};
 use parking_lot::Mutex;
-use sharded_slab::{Entry, Slab};
+use sharded_slab::Slab;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
@@ -22,7 +22,7 @@ mod state;
 
 #[derive(Default)]
 pub struct Game {
-    rooms: Slab<Room>,
+    rooms: Slab<Arc<Room>>,
     room_map: Arc<Mutex<HashMap<String, usize>>>,
 }
 
@@ -43,9 +43,11 @@ impl Game {
         Ok(username)
     }
 
-    fn room(&self, room_id: usize) -> Result<Entry<Room>, Status> {
+    fn room(&self, room_id: usize) -> Result<Arc<Room>, Status> {
         self.rooms
             .get(room_id)
+            .as_deref()
+            .cloned()
             .ok_or(Status::internal("Room not found"))
     }
 }
@@ -64,7 +66,10 @@ impl game_service_server::GameService for Game {
         // New room creation
         if !room_map.contains_key(&room_name) {
             let room = Room::new(username.clone());
-            let room_id = self.rooms.insert(room).expect("Failed to insert room");
+            let room_id = self
+                .rooms
+                .insert(Arc::new(room))
+                .expect("Failed to insert room");
             room_map.insert(room_name.clone(), room_id);
             tracing::info!("Created new room: {}, player: {}", room_name, username);
             return Ok(Response::new(JoinRoomResponse {
@@ -101,7 +106,7 @@ impl game_service_server::GameService for Game {
         tracing::info!("Player {} joined room: {}", username, room_name);
         drop(state); // Release the lock before sending
 
-        room.game_start()?;
+        let _handle = room.game_start(); // TODO: avoid memory leak
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
