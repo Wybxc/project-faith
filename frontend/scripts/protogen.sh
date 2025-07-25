@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 mkdir -p ./src/generated/proto
 protoc \
   --plugin=./node_modules/.bin/protoc-gen-ts_proto \

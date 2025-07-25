@@ -43,6 +43,7 @@ export interface GameState {
   otherHandCount: number;
   selfDeckCount: number;
   otherDeckCount: number;
+  roundNumber: number;
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -415,7 +416,7 @@ export const PingResponse: MessageFns<PingResponse> = {
 };
 
 function createBaseGameState(): GameState {
-  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0 };
+  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0, roundNumber: 0 };
 }
 
 export const GameState: MessageFns<GameState> = {
@@ -433,6 +434,9 @@ export const GameState: MessageFns<GameState> = {
     }
     if (message.otherDeckCount !== 0) {
       writer.uint32(32).uint32(message.otherDeckCount);
+    }
+    if (message.roundNumber !== 0) {
+      writer.uint32(40).uint32(message.roundNumber);
     }
     return writer;
   },
@@ -486,6 +490,14 @@ export const GameState: MessageFns<GameState> = {
           message.otherDeckCount = reader.uint32();
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.roundNumber = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -501,6 +513,7 @@ export const GameState: MessageFns<GameState> = {
       otherHandCount: isSet(object.otherHandCount) ? globalThis.Number(object.otherHandCount) : 0,
       selfDeckCount: isSet(object.selfDeckCount) ? globalThis.Number(object.selfDeckCount) : 0,
       otherDeckCount: isSet(object.otherDeckCount) ? globalThis.Number(object.otherDeckCount) : 0,
+      roundNumber: isSet(object.roundNumber) ? globalThis.Number(object.roundNumber) : 0,
     };
   },
 
@@ -518,6 +531,9 @@ export const GameState: MessageFns<GameState> = {
     if (message.otherDeckCount !== 0) {
       obj.otherDeckCount = Math.round(message.otherDeckCount);
     }
+    if (message.roundNumber !== 0) {
+      obj.roundNumber = Math.round(message.roundNumber);
+    }
     return obj;
   },
 
@@ -530,6 +546,7 @@ export const GameState: MessageFns<GameState> = {
     message.otherHandCount = object.otherHandCount ?? 0;
     message.selfDeckCount = object.selfDeckCount ?? 0;
     message.otherDeckCount = object.otherDeckCount ?? 0;
+    message.roundNumber = object.roundNumber ?? 0;
     return message;
   },
 };

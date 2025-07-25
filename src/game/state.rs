@@ -7,7 +7,7 @@ pub struct GameState {
     players: (PlayerState, PlayerState),
 
     /// The current round number.
-    round: usize,
+    round: u32,
 }
 
 impl GameState {
@@ -51,12 +51,14 @@ impl GameState {
         let other_hand_count = self.me(player.opp()).hand.len() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
+        let round_number = self.round;
 
         grpc::GameState {
             self_hand,
             other_hand_count,
             self_deck_count,
             other_deck_count,
+            round_number,
         }
     }
 

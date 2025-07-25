@@ -40,4 +40,5 @@ message GameState {
     uint32 other_hand_count = 2;
     uint32 self_deck_count = 3;
     uint32 other_deck_count = 4;
+    uint32 round_number = 5;
 }
