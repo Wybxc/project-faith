@@ -10,7 +10,7 @@ use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 use crate::{
     game::{
         room::{Room, RoomState},
-        running::GameState,
+        state::GameState,
     },
     grpc::*,
 };
@@ -18,7 +18,7 @@ use crate::{
 mod card;
 mod player;
 mod room;
-mod running;
+mod state;
 
 #[derive(Default)]
 pub struct Game {

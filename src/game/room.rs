@@ -3,7 +3,7 @@ use tokio::sync::broadcast;
 use tonic::Status;
 
 use crate::{
-    game::running::GameState,
+    game::state::{GameState, PlayerId},
     grpc::{GameEvent, game_event::EventType},
 };
 
@@ -49,8 +49,8 @@ impl Room {
         let RoomState::Playing(game) = &*state else {
             return Ok(()); // No game to sync
         };
-        let p0_game_state = game.to_client(true);
-        let p1_game_state = game.to_client(false);
+        let p0_game_state = game.to_client(PlayerId::Player0);
+        let p1_game_state = game.to_client(PlayerId::Player1);
         self.p0_sender
             .send(GameEvent {
                 event_type: Some(EventType::StateUpdate(p0_game_state)),

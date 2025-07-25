@@ -2,7 +2,9 @@ use crate::game::card::CardId;
 
 pub struct PlayerState {
     pub username: String,
+    /// The player's hand of cards, from left to right.
     pub hand: Vec<CardId>,
+    /// The player's deck of cards, from bottom to top.
     pub deck: Vec<CardId>,
 }
 
