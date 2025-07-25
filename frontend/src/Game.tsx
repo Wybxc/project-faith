@@ -47,7 +47,19 @@ const GameBoard: Component<{
 }> = (props) => {
   return (
     <>
-      <div>{JSON.stringify(props.state)}</div>
+      <p>对方牌库剩余: {props.state.otherDeckCount}</p>
+      <p>你的牌库剩余: {props.state.selfDeckCount}</p>
+      <p>对方手牌数: {props.state.otherHandCount}</p>
+      <div class={css({ display: 'flex', gap: '10px' })}>
+        你的手牌
+        <For each={props.state.selfHand}>
+          {(card) => (
+            <div class={css({ padding: '10px', border: '1px solid #ccc' })}>
+              {card}
+            </div>
+          )}
+        </For>
+      </div>
     </>
   );
 };
