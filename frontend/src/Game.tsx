@@ -1,50 +1,52 @@
-import { type Component, createSignal, For, onCleanup } from 'solid-js';
+import { type Component, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
+import { GameState } from './generated/proto/game.v1';
 
 const Game: Component<{
   api: GameV1Api;
 }> = (props) => {
-  const [messages, setMessages] = createSignal<string[]>([]);
+  const [waiting, setWaiting] = createSignal(true);
+  const [state, setState] = createStore<GameState>({
+    selfHand: [],
+    otherHandCount: 0,
+  });
 
   const subscribe = props.api.enterGame().subscribe((event) => {
-    setMessages((prev) => [...prev, JSON.stringify(event)]);
+    if (event.stateUpdate !== undefined) {
+      setState(reconcile(event.stateUpdate));
+      setWaiting(false);
+    }
   });
   onCleanup(() => subscribe.unsubscribe());
 
   return (
-    <div>
-      <h2>游戏</h2>
-      <div>
-        <For each={messages()}>
-          {(message) => (
-            <div
-              class={css({ padding: '0.5rem', borderBottom: '1px solid #ccc' })}
-            >
-              {message}
-            </div>
-          )}
-        </For>
-      </div>
-      <button
-        class={css({
-          padding: '0.5rem 1rem',
-          backgroundColor: '#28a745',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          _hover: {
-            backgroundColor: '#218838',
-          },
-        })}
-        onClick={async () => {
-          await props.api.ping();
-        }}
-      >
-        发送消息
-      </button>
-    </div>
+    <Show
+      when={!waiting()}
+      fallback={
+        <div>
+          <p class={css({ textAlign: 'center', padding: '20px' })}>
+            Waiting for game to start...
+          </p>
+          <p class={css({ textAlign: 'center', padding: '20px' })}>
+            You are in room: {props.api.getRoomName()}
+          </p>
+        </div>
+      }
+    >
+      <GameBoard state={state} />
+    </Show>
+  );
+};
+
+const GameBoard: Component<{
+  state: GameState;
+}> = (props) => {
+  return (
+    <>
+      <div>{JSON.stringify(props.state)}</div>
+    </>
   );
 };
 

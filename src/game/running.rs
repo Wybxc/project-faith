@@ -38,8 +38,16 @@ impl RunningGame {
         }
     }
 
+    pub fn is_player(&self, username: &str) -> bool {
+        self.is_player_one(username) || self.is_player_two(username)
+    }
+
     pub fn is_player_one(&self, username: &str) -> bool {
         self.p1_username == username
+    }
+
+    pub fn is_player_two(&self, username: &str) -> bool {
+        self.p2_username == username
     }
 
     pub fn to_client(&self, is_player_one: bool) -> GameState {

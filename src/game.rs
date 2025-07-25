@@ -4,13 +4,19 @@ use base64::prelude::*;
 use futures::{Stream, StreamExt};
 use parking_lot::Mutex;
 use sharded_slab::{Entry, Slab};
-use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
-use crate::{game::running::RunningGame, grpc::*};
+use crate::{
+    game::{
+        room::{Room, RoomState},
+        running::RunningGame,
+    },
+    grpc::*,
+};
 
 mod card;
+mod room;
 mod running;
 
 #[derive(Default)]
@@ -56,9 +62,10 @@ impl game_service_server::GameService for Game {
 
         // New room creation
         if !room_map.contains_key(&room_name) {
-            let room = Room::new(username);
+            let room = Room::new(username.clone());
             let room_id = self.rooms.insert(room).expect("Failed to insert room");
             room_map.insert(room_name.clone(), room_id);
+            tracing::info!("Created new room: {}, player: {}", room_name, username);
             return Ok(Response::new(JoinRoomResponse {
                 message: format!("Created room: {room_name}"),
                 room_id: room_id.to_string(),
@@ -72,6 +79,15 @@ impl game_service_server::GameService for Game {
             .ok_or_else(|| Status::internal("Room not found in room map"))?;
         let room = self.room(room_id)?;
 
+
+        if room.check_in_room(&username) {
+            return Ok(Response::new(JoinRoomResponse {
+                message: "Already in the room".to_string(),
+                room_id: room_id.to_string(),
+                success: true,
+            }));
+        }
+        
         let mut state = room.state.lock();
         let p1_username = match &*state {
             RoomState::Waiting { p1_username } if p1_username == &username => {
@@ -81,7 +97,8 @@ impl game_service_server::GameService for Game {
             RoomState::Playing(..) => return Err(Status::failed_precondition("Room is full")),
             RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
         };
-        *state = RoomState::Playing(RunningGame::new(p1_username, username));
+        *state = RoomState::Playing(RunningGame::new(p1_username, username.clone()));
+        tracing::info!("Player {} joined room: {}", username, room_name);
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
@@ -96,7 +113,7 @@ impl game_service_server::GameService for Game {
         &self,
         request: Request<EnterGameRequest>,
     ) -> Result<Response<Self::EnterGameStream>, Status> {
-        let _username = self.auth(request.metadata())?;
+        let username = self.auth(request.metadata())?;
 
         let room_id = request.into_inner().room_id;
         let room_id = room_id
@@ -104,15 +121,18 @@ impl game_service_server::GameService for Game {
             .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
         let room = self.room(room_id)?;
 
-        let events = room.sender.subscribe();
+        let events = room.get_sender(&username)?.subscribe();
         let events = BroadcastStream::new(events)
             .map(|result| result.map_err(|e| Status::internal(format!("Broadcast error: {e}"))));
         let events = Box::pin(events);
+
+        room.sync_game_state()?;
+
         Ok(Response::new(events))
     }
 
     async fn ping(&self, request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
-        let username = self.auth(request.metadata())?;
+        let _username = self.auth(request.metadata())?;
 
         let room_id = request.into_inner().room_id;
         tracing::debug!("Received ping for room ID: {}", room_id);
@@ -120,40 +140,9 @@ impl game_service_server::GameService for Game {
             .parse()
             .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
         let room = self.room(room_id)?;
-        let state = room.state.lock();
 
-        let RoomState::Playing(game) = &*state else {
-            return Err(Status::failed_precondition("Room is not in play"));
-        };
-        let game_state = game.to_client(game.is_player_one(&username));
-
-        room.sender
-            .send(GameEvent {
-                event_type: Some(game_event::EventType::StateUpdate(game_state)),
-            })
-            .map_err(|_| Status::internal("Failed to send ping event"))?;
+        room.sync_game_state()?;
 
         Ok(Response::new(PingResponse {}))
     }
-}
-
-struct Room {
-    sender: broadcast::Sender<GameEvent>,
-    state: Mutex<RoomState>,
-}
-
-impl Room {
-    fn new(p1_username: String) -> Self {
-        let (sender, _) = broadcast::channel(128);
-        Self {
-            sender,
-            state: Mutex::new(RoomState::Waiting { p1_username }),
-        }
-    }
-}
-
-enum RoomState {
-    Waiting { p1_username: String },
-    Playing(running::RunningGame),
-    Finished,
 }

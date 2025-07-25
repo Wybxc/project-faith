@@ -5,6 +5,7 @@ import { HOST } from "./common";
 export class GameV1Api {
     private rpc: GrpcWebImpl;
     private client: GameServiceClientImpl;
+    private roomName: string | null = null;
     private roomId: string | null = null;
 
     constructor(token: string) {
@@ -15,11 +16,16 @@ export class GameV1Api {
         this.client = new GameServiceClientImpl(this.rpc);
     }
 
+    getRoomName() {
+        return this.roomName ?? "unknown";
+    }
+
     async joinRoom(roomName: string) {
         const response = await this.client.JoinRoom({ roomName });
         if (!response.success) {
             throw new Error(response.message);
         }
+        this.roomName = roomName;
         this.roomId = response.roomId;
         return response.message;
     }
