@@ -3,31 +3,31 @@ use tokio::sync::broadcast;
 use tonic::Status;
 
 use crate::{
-    game::running::RunningGame,
+    game::running::GameState,
     grpc::{GameEvent, game_event::EventType},
 };
 
 pub struct Room {
+    p0_sender: broadcast::Sender<GameEvent>,
     p1_sender: broadcast::Sender<GameEvent>,
-    p2_sender: broadcast::Sender<GameEvent>,
 
     pub state: Mutex<RoomState>,
 }
 
 impl Room {
-    pub fn new(p1_username: String) -> Self {
+    pub fn new(p0_username: String) -> Self {
+        let (p0_sender, _) = broadcast::channel(128);
         let (p1_sender, _) = broadcast::channel(128);
-        let (p2_sender, _) = broadcast::channel(128);
         Self {
+            p0_sender,
             p1_sender,
-            p2_sender,
-            state: Mutex::new(RoomState::Waiting { p1_username }),
+            state: Mutex::new(RoomState::Waiting { p0_username }),
         }
     }
 
     pub fn check_in_room(&self, username: &str) -> bool {
         match &*self.state.lock() {
-            RoomState::Waiting { p1_username } if p1_username == username => true,
+            RoomState::Waiting { p0_username } if p0_username == username => true,
             RoomState::Playing(running_game) if running_game.is_player(username) => true,
             _ => false,
         }
@@ -35,9 +35,9 @@ impl Room {
 
     pub fn get_sender(&self, username: &str) -> Result<&broadcast::Sender<GameEvent>, Status> {
         match &*self.state.lock() {
-            RoomState::Waiting { p1_username } if p1_username == username => Ok(&self.p1_sender),
-            RoomState::Playing(rg) if rg.is_player_one(username) => Ok(&self.p1_sender),
-            RoomState::Playing(rg) if rg.is_player_two(username) => Ok(&self.p2_sender),
+            RoomState::Waiting { p0_username } if p0_username == username => Ok(&self.p0_sender),
+            RoomState::Playing(rg) if rg.is_player0(username) => Ok(&self.p0_sender),
+            RoomState::Playing(rg) if rg.is_player1(username) => Ok(&self.p1_sender),
             RoomState::Finished => Err(Status::failed_precondition("Game finished")),
             _ => Err(Status::failed_precondition("Not a player")),
         }
@@ -49,16 +49,16 @@ impl Room {
         let RoomState::Playing(game) = &*state else {
             return Ok(()); // No game to sync
         };
-        let p1_game_state = game.to_client(true);
-        let p2_game_state = game.to_client(false);
+        let p0_game_state = game.to_client(true);
+        let p1_game_state = game.to_client(false);
+        self.p0_sender
+            .send(GameEvent {
+                event_type: Some(EventType::StateUpdate(p0_game_state)),
+            })
+            .map_err(|_| Status::internal("Failed to send initial game state"))?;
         self.p1_sender
             .send(GameEvent {
                 event_type: Some(EventType::StateUpdate(p1_game_state)),
-            })
-            .map_err(|_| Status::internal("Failed to send initial game state"))?;
-        self.p2_sender
-            .send(GameEvent {
-                event_type: Some(EventType::StateUpdate(p2_game_state)),
             })
             .map_err(|_| Status::internal("Failed to send initial game state"))?;
         Ok(())
@@ -66,7 +66,7 @@ impl Room {
 }
 
 pub enum RoomState {
-    Waiting { p1_username: String },
-    Playing(RunningGame),
+    Waiting { p0_username: String },
+    Playing(GameState),
     Finished,
 }

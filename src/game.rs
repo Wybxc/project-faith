@@ -10,12 +10,13 @@ use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 use crate::{
     game::{
         room::{Room, RoomState},
-        running::RunningGame,
+        running::GameState,
     },
     grpc::*,
 };
 
 mod card;
+mod player;
 mod room;
 mod running;
 
@@ -88,15 +89,15 @@ impl game_service_server::GameService for Game {
         }
 
         let mut state = room.state.lock();
-        let p1_username = match &*state {
-            RoomState::Waiting { p1_username } if p1_username == &username => {
+        let p0_username = match &*state {
+            RoomState::Waiting { p0_username } if p0_username == &username => {
                 return Err(Status::failed_precondition("Already in the room"));
             }
-            RoomState::Waiting { p1_username } => p1_username.clone(),
+            RoomState::Waiting { p0_username } => p0_username.clone(),
             RoomState::Playing(..) => return Err(Status::failed_precondition("Room is full")),
             RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
         };
-        *state = RoomState::Playing(RunningGame::new(p1_username, username.clone()));
+        *state = RoomState::Playing(GameState::new(p0_username, username.clone()));
         tracing::info!("Player {} joined room: {}", username, room_name);
 
         Ok(Response::new(JoinRoomResponse {
