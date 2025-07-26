@@ -32,6 +32,7 @@ const Game: Component<{
     otherDeckCount: 0,
     roundNumber: 0,
     gameFinished: false,
+    debugLog: [],
   });
   const [userEvent, setUserEvent] = createSignal<RequestUserEvent | null>(null);
 
@@ -110,6 +111,13 @@ const GameBoard: Component<{
           <EventInput userEvent={userEvent} onSubmit={props.onFinishEvent} />
         )}
       </Show>
+
+      <details>
+        <summary>调试日志</summary>
+        <ul>
+          <For each={props.state.debugLog}>{(log) => <li>{log}</li>}</For>
+        </ul>
+      </details>
     </>
   );
 };

@@ -42,6 +42,7 @@ export interface GameState {
   readonly otherDeckCount: number;
   readonly roundNumber: number;
   readonly gameFinished: boolean;
+  readonly debugLog: readonly string[];
 }
 
 export interface RequestUserEvent {
@@ -308,7 +309,15 @@ export const GameEvent: MessageFns<GameEvent> = {
 };
 
 function createBaseGameState(): GameState {
-  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0, roundNumber: 0, gameFinished: false };
+  return {
+    selfHand: [],
+    otherHandCount: 0,
+    selfDeckCount: 0,
+    otherDeckCount: 0,
+    roundNumber: 0,
+    gameFinished: false,
+    debugLog: [],
+  };
 }
 
 export const GameState: MessageFns<GameState> = {
@@ -332,6 +341,9 @@ export const GameState: MessageFns<GameState> = {
     }
     if (message.gameFinished !== false) {
       writer.uint32(48).bool(message.gameFinished);
+    }
+    for (const v of message.debugLog) {
+      writer.uint32(58).string(v!);
     }
     return writer;
   },
@@ -401,6 +413,14 @@ export const GameState: MessageFns<GameState> = {
           message.gameFinished = reader.bool();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.debugLog.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -421,6 +441,7 @@ export const GameState: MessageFns<GameState> = {
     message.otherDeckCount = object.otherDeckCount ?? 0;
     message.roundNumber = object.roundNumber ?? 0;
     message.gameFinished = object.gameFinished ?? false;
+    message.debugLog = object.debugLog?.map((e) => e) || [];
     return message;
   },
 };

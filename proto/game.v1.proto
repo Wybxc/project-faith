@@ -36,6 +36,7 @@ message GameState {
     uint32 other_deck_count = 4;
     uint32 round_number = 5;
     bool game_finished = 6;
+    repeated string debug_log = 7;
 }
 
 message RequestUserEvent {

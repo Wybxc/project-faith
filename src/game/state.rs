@@ -17,6 +17,9 @@ pub struct GameState {
 
     /// Indicates if the game is finished.
     finished: bool,
+
+    /// Debug log for tracing actions.
+    debug_log: Vec<String>,
 }
 
 impl GameState {
@@ -27,6 +30,7 @@ impl GameState {
             players: (p0, p1),
             round: 0,
             finished: false,
+            debug_log: Vec::new(),
         }
     }
 
@@ -51,6 +55,7 @@ impl GameState {
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
         let round_number = self.round;
         let game_finished = self.finished;
+        let debug_log = self.debug_log.clone();
         grpc::GameState {
             self_hand,
             other_hand_count,
@@ -58,11 +63,13 @@ impl GameState {
             other_deck_count,
             round_number,
             game_finished,
+            debug_log,
         }
     }
 
     /// Performs an action on the game state.
     pub fn perform<A: Action>(&mut self, action: A) -> A::Output {
+        self.debug_log.push(format!("{action:?}"));
         action.perform(self)
     }
 }
@@ -83,13 +90,14 @@ impl PlayerId {
     }
 }
 
-pub trait Action {
+pub trait Action: std::fmt::Debug {
     type Output;
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output;
 }
 
 /// 初始化游戏状态
+#[derive(Debug)]
 pub struct Initalize;
 
 impl Action for Initalize {
@@ -103,6 +111,7 @@ impl Action for Initalize {
 }
 
 /// 玩家抽牌
+#[derive(Debug)]
 pub struct DrawCards {
     pub player: PlayerId,
     pub count: usize,
@@ -125,6 +134,7 @@ impl Action for DrawCards {
 }
 
 /// 玩家出牌（开始）
+#[derive(Debug)]
 pub struct PlayCard {
     pub player: PlayerId,
     pub card_index: usize,
@@ -145,6 +155,7 @@ impl Action for PlayCard {
 }
 
 /// 执行卡牌效果
+#[derive(Debug)]
 pub struct ExecuteCard {
     pub player: PlayerId,
     pub card_id: CardId,
@@ -168,6 +179,7 @@ impl Action for ExecuteCard {
 }
 
 /// 回合结束，增加回合数
+#[derive(Debug)]
 pub struct BumpRound;
 
 impl Action for BumpRound {
@@ -179,6 +191,7 @@ impl Action for BumpRound {
 }
 
 /// 游戏结束
+#[derive(Debug)]
 pub struct GameFinished;
 
 impl Action for GameFinished {
