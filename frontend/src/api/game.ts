@@ -1,5 +1,5 @@
 import { grpc } from "@improbable-eng/grpc-web";
-import { GameServiceClientImpl, GrpcWebImpl } from "../generated/proto/game.v1";
+import { GameServiceClientImpl, GrpcWebImpl, UserEvent } from "../generated/proto/game.v1";
 import { HOST } from "./common";
 import { map } from "rxjs";
 
@@ -37,5 +37,12 @@ export class GameV1Api {
         }
         const response = this.client.EnterGame({ roomId: this.roomId! });
         return response.pipe(map(event => event.eventType));
+    }
+
+    async submitUserEvent(seqnum: Long, eventType: UserEvent["eventType"]) {
+        if (!this.roomId) {
+            throw new Error("You must join a room before submitting user events.");
+        }
+        await this.client.SubmitUserEvent({ seqnum, roomId: this.roomId!, eventType });
     }
 }

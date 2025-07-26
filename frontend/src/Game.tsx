@@ -1,13 +1,28 @@
-import { type Component, createSignal, For, onCleanup, Show } from 'solid-js';
+import {
+  type Component,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
-import { GameState } from './generated/proto/game.v1';
+import {
+  GameState,
+  PlayCard,
+  RequestUserEvent,
+  UserEvent,
+} from './generated/proto/game.v1';
 
 const Game: Component<{
   api: GameV1Api;
 }> = (props) => {
-  const [waiting, setWaiting] = createSignal(true);
+  const [starting, setStarting] = createSignal(true);
   const [state, setState] = createStore<GameState>({
     selfHand: [],
     otherHandCount: 0,
@@ -15,15 +30,16 @@ const Game: Component<{
     otherDeckCount: 0,
     roundNumber: 0,
   });
+  const [userEvent, setUserEvent] = createSignal<RequestUserEvent | null>(null);
 
   const subscribe = props.api.enterGame().subscribe((event) => {
     switch (event?.$case) {
       case 'stateUpdate':
         setState(reconcile(event.value));
-        setWaiting(false);
+        setStarting(false);
         break;
       case 'requestUserEvent':
-        // Handle user event request
+        setUserEvent(event.value);
         break;
     }
   });
@@ -31,7 +47,7 @@ const Game: Component<{
 
   return (
     <Show
-      when={!waiting()}
+      when={!starting()}
       fallback={
         <div>
           <p class={css({ textAlign: 'center', padding: '20px' })}>
@@ -43,13 +59,25 @@ const Game: Component<{
         </div>
       }
     >
-      <GameBoard state={state} />
+      <GameBoard
+        state={state}
+        userEvent={userEvent()}
+        onFinishEvent={(event) => {
+          const seqnum = userEvent()?.seqnum;
+          if (event && seqnum) {
+            props.api.submitUserEvent(seqnum, event);
+          }
+          setUserEvent(null);
+        }}
+      />
     </Show>
   );
 };
 
 const GameBoard: Component<{
   state: GameState;
+  userEvent: RequestUserEvent | null;
+  onFinishEvent: (event?: UserEvent['eventType']) => void;
 }> = (props) => {
   return (
     <>
@@ -59,9 +87,106 @@ const GameBoard: Component<{
       <p>对方手牌数: {props.state.otherHandCount}</p>
       <div>
         你的手牌
-        <For each={props.state.selfHand}>{(card) => <p>{card}</p>}</For>
+        <For each={props.state.selfHand}>
+          {(card, i) => (
+            <p>
+              {i()}: {card}
+            </p>
+          )}
+        </For>
       </div>
+
+      <Show when={props.userEvent} keyed>
+        {(userEvent) => (
+          <EventInput
+            userEvent={userEvent}
+            onSubmit={(event) => {
+              if (event === 'timeout') {
+                props.onFinishEvent();
+              } else {
+                props.onFinishEvent(event);
+              }
+            }}
+          />
+        )}
+      </Show>
     </>
+  );
+};
+
+const EventInput: Component<{
+  userEvent: RequestUserEvent;
+  onSubmit: (event: UserEvent['eventType'] | 'timeout') => void;
+}> = (props) => {
+  const [time, setTime] = createSignal(0);
+  const [intervalId, setIntervalId] = createSignal<number | null>(null);
+
+  onMount(() => {
+    setTime(20);
+    if (intervalId() !== null) {
+      clearInterval(intervalId()!);
+    }
+    const interval = setInterval(() => {
+      setTime((prev) => {
+        prev -= 1;
+        if (prev <= 0) {
+          clearInterval(interval);
+          setIntervalId(null);
+          props.onSubmit('timeout');
+        }
+        return prev;
+      });
+    }, 1000);
+    setIntervalId(interval);
+  });
+
+  return (
+    <div>
+      <p>剩余时间: {time()} 秒</p>
+      <Switch>
+        <Match when={props.userEvent.eventType?.$case === 'playCard'}>
+          <PlayCardComponent
+            onSubmit={(event) =>
+              props.onSubmit({
+                $case: 'playCard',
+                value: event,
+              })
+            }
+          />
+        </Match>
+      </Switch>
+    </div>
+  );
+};
+
+const PlayCardComponent: Component<{
+  onSubmit: (event: PlayCard) => void;
+}> = (props) => {
+  const [cardId, setCardId] = createSignal('');
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={cardId()}
+        onInput={(e) => setCardId(e.currentTarget.value)}
+        class={css({
+          padding: '0.5rem',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          marginBottom: '1rem',
+        })}
+      />
+      <button
+        onClick={() =>
+          props.onSubmit({
+            cardIdx: parseInt(cardId(), 10),
+          })
+        }
+      >
+        Play Card
+      </button>
+    </div>
   );
 };
 
