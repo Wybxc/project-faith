@@ -1,5 +1,6 @@
 import {
   type Component,
+  createMemo,
   createSignal,
   For,
   Match,
@@ -18,7 +19,7 @@ import {
   RequestUserEvent,
   UserEvent,
 } from './generated/proto/game.v1';
-import { interval } from 'rxjs';
+import cards from './assets/cards.json';
 
 const Game: Component<{
   api: GameV1Api;
@@ -91,7 +92,7 @@ const GameBoard: Component<{
         <For each={props.state.selfHand}>
           {(card, i) => (
             <p>
-              {i()}: {card}
+              {i()}: <Card cardId={card.toString()} />
             </p>
           )}
         </For>
@@ -103,6 +104,17 @@ const GameBoard: Component<{
         )}
       </Show>
     </>
+  );
+};
+
+const Card: Component<{
+  cardId: string;
+}> = (props) => {
+  const card = createMemo(() => cards[props.cardId as keyof typeof cards]);
+  return (
+    <span title={card()?.description ?? '未知牌'}>
+      {card()?.name ?? '未知牌'}
+    </span>
   );
 };
 
