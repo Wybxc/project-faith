@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use atomig::{Atom, Atomic};
 use parking_lot::Mutex;
 use sharded_slab::Slab;
 use tokio::sync::{broadcast, oneshot};
@@ -13,13 +14,18 @@ use crate::{
     grpc::*,
 };
 
+#[derive(Atom)]
+#[repr(u8)]
 pub enum RoomState {
-    Waiting { p0_username: String },
-    Playing(GameState),
+    Waiting,
+    Playing,
     Finished,
 }
 
 pub struct Room {
+    p0_username: String,
+    p1_username: OnceLock<String>,
+
     p0_sender: broadcast::Sender<GameEvent>,
     p1_sender: broadcast::Sender<GameEvent>,
 
@@ -34,7 +40,8 @@ pub struct Room {
     /// Pending events will be re-sent to the player if they re-join the room
     p1_pending_event: Mutex<Option<RequestUserEvent>>,
 
-    pub state: Mutex<RoomState>,
+    pub room_state: Atomic<RoomState>,
+    pub game_state: Mutex<GameState>,
 }
 
 impl Room {
@@ -42,32 +49,47 @@ impl Room {
         let (p0_sender, _) = broadcast::channel(128);
         let (p1_sender, _) = broadcast::channel(128);
         Self {
+            p0_username,
+            p1_username: OnceLock::new(),
             p0_sender,
             p1_sender,
             user_events: Slab::new(),
             p0_pending_event: Mutex::new(None),
             p1_pending_event: Mutex::new(None),
-            state: Mutex::new(RoomState::Waiting { p0_username }),
+            room_state: Atomic::new(RoomState::Waiting),
+            game_state: Mutex::new(GameState::new()),
         }
     }
 
     pub fn check_in_room(&self, username: &str) -> bool {
-        match &*self.state.lock() {
-            RoomState::Waiting { p0_username } if p0_username == username => true,
-            RoomState::Playing(running_game) if running_game.is_player(username) => true,
-            _ => false,
+        if self.p0_username == username {
+            true
+        } else if let Some(p1_username) = self.p1_username.get() {
+            p1_username == username
+        } else {
+            false
         }
     }
 }
 
 #[allow(clippy::result_large_err)]
 impl Room {
+    pub fn set_player1(&self, p1_username: String) -> Result<(), Status> {
+        self.p1_username
+            .set(p1_username)
+            .map_err(|_| Status::internal("Player 1 username already set"))?;
+        Ok(())
+    }
+
     pub fn get_player(&self, username: &str) -> Result<PlayerId, Status> {
-        match &*self.state.lock() {
-            RoomState::Waiting { p0_username } if p0_username == username => Ok(PlayerId::Player0),
-            RoomState::Playing(rg) if rg.is_player0(username) => Ok(PlayerId::Player0),
-            RoomState::Playing(rg) if rg.is_player1(username) => Ok(PlayerId::Player1),
-            _ => Err(Status::failed_precondition("Not a player in this room")),
+        if self.p0_username == username {
+            Ok(PlayerId::Player0)
+        } else if let Some(p1_username) = self.p1_username.get()
+            && p1_username == username
+        {
+            Ok(PlayerId::Player1)
+        } else {
+            Err(Status::failed_precondition("Not a player in this room"))
         }
     }
 
@@ -113,22 +135,16 @@ impl Room {
 }
 
 impl Room {
-    pub fn read_state<T>(&self, reader: impl FnOnce(&GameState) -> T) -> anyhow::Result<T> {
-        let state = self.state.lock();
-        match &*state {
-            RoomState::Playing(game) => Ok(reader(game)),
-            _ => Err(anyhow::anyhow!("Game not in progress")),
-        }
+    pub fn read_state<T>(&self, reader: impl FnOnce(&GameState) -> T) -> T {
+        let state = self.game_state.lock();
+        reader(&state)
     }
 
     pub fn sync_game_state(&self) {
         // Send the current game state to the player
-        let state = self.state.lock();
-        let RoomState::Playing(game) = &*state else {
-            return; // No game to sync
-        };
-        let p0_game_state = game.to_client(PlayerId::Player0);
-        let p1_game_state = game.to_client(PlayerId::Player1);
+        let state = self.game_state.lock();
+        let p0_game_state = state.to_client(PlayerId::Player0);
+        let p1_game_state = state.to_client(PlayerId::Player1);
         let _ = self.p0_sender.send(GameEvent {
             event_type: Some(game_event::EventType::StateUpdate(p0_game_state)),
         });
@@ -137,17 +153,14 @@ impl Room {
         });
     }
 
-    pub fn perform<A: Action>(&self, action: A) -> anyhow::Result<A::Output> {
+    pub fn perform<A: Action>(&self, action: A) -> A::Output {
         let output = {
-            let mut state = self.state.lock();
-            let RoomState::Playing(game) = &mut *state else {
-                return Err(anyhow::anyhow!("Game not in progress"));
-            };
-            game.perform(action)
+            let mut state = self.game_state.lock();
+            state.perform(action)
         };
 
         self.sync_game_state();
-        Ok(output)
+        output
     }
 
     pub async fn request_user_event<E: UserEvent>(

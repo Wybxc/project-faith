@@ -17,9 +17,9 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn new(p0_username: String, p1_username: String) -> Self {
-        let p0 = PlayerState::new(p0_username);
-        let p1 = PlayerState::new(p1_username);
+    pub fn new() -> Self {
+        let p0 = PlayerState::new();
+        let p1 = PlayerState::new();
         Self {
             players: (p0, p1),
             round: 0,
@@ -38,18 +38,6 @@ impl GameState {
             PlayerId::Player0 => &mut self.players.0,
             PlayerId::Player1 => &mut self.players.1,
         }
-    }
-
-    pub fn is_player(&self, username: &str) -> bool {
-        self.is_player0(username) || self.is_player1(username)
-    }
-
-    pub fn is_player0(&self, username: &str) -> bool {
-        self.players.0.username == username
-    }
-
-    pub fn is_player1(&self, username: &str) -> bool {
-        self.players.1.username == username
     }
 
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {

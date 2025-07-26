@@ -1,4 +1,8 @@
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{
+    collections::HashMap,
+    pin::Pin,
+    sync::{Arc, atomic::Ordering},
+};
 
 use base64::prelude::*;
 use futures::{Stream, StreamExt};
@@ -8,10 +12,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
 use crate::{
-    game::{
-        room::{Room, RoomState},
-        state::GameState,
-    },
+    game::room::{Room, RoomState},
     grpc::*,
 };
 
@@ -94,20 +95,20 @@ impl game_service_server::GameService for Game {
             }));
         }
 
-        let mut state = room.state.lock();
-        let p0_username = match &*state {
-            RoomState::Waiting { p0_username } if p0_username == &username => {
-                return Err(Status::failed_precondition("Already in the room"));
-            }
-            RoomState::Waiting { p0_username } => p0_username.clone(),
-            RoomState::Playing(..) => return Err(Status::failed_precondition("Room is full")),
-            RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
+        if let Err(state) = room.room_state.compare_exchange(
+            RoomState::Waiting,
+            RoomState::Playing,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            return Err(match state {
+                RoomState::Waiting => unreachable!(),
+                RoomState::Playing => Status::failed_precondition("Room is full"),
+                RoomState::Finished => Status::failed_precondition("Room has finished"),
+            });
         };
-
-        {
-            *state = RoomState::Playing(GameState::new(p0_username, username.clone()));
-            tracing::info!("Player {} joined room: {}", username, room_name);
-        }
+        room.set_player1(username.clone())?;
+        tracing::info!("Player {} joined room: {}", username, room_name);
 
         let _handle = room.clone().main_loop(); // TODO: avoid memory leak
 
