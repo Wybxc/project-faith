@@ -25,7 +25,7 @@ mod user;
 
 #[derive(Default)]
 pub struct Game {
-    rooms: Slab<Arc<Room>>,
+    rooms: Arc<Slab<Arc<Room>>>,
     room_map: Arc<Mutex<HashMap<String, usize>>>,
 }
 
@@ -110,7 +110,15 @@ impl game_service_server::GameService for Game {
         room.set_player1(username.clone())?;
         tracing::info!("Player {} joined room: {}", username, room_name);
 
-        let _handle = room.clone().main_loop(); // TODO: avoid memory leak
+        let room = Arc::clone(&room);
+        let rooms = Arc::clone(&self.rooms);
+        let room_map = Arc::clone(&self.room_map);
+        tokio::spawn(async move {
+            let _ = room.main_loop().await;
+            tracing::info!("Room {} finished", room_name);
+            rooms.remove(room_id);
+            room_map.lock().remove(&room_name);
+        });
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),

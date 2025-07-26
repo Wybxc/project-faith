@@ -14,6 +14,9 @@ pub struct GameState {
 
     /// The current round number.
     round: u32,
+
+    /// Indicates if the game is finished.
+    finished: bool,
 }
 
 impl GameState {
@@ -23,6 +26,7 @@ impl GameState {
         Self {
             players: (p0, p1),
             round: 0,
+            finished: false,
         }
     }
 
@@ -46,13 +50,14 @@ impl GameState {
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
         let round_number = self.round;
-
+        let game_finished = self.finished;
         grpc::GameState {
             self_hand,
             other_hand_count,
             self_deck_count,
             other_deck_count,
             round_number,
+            game_finished,
         }
     }
 
@@ -91,8 +96,8 @@ impl Action for Initalize {
     type Output = ();
 
     fn perform(&self, game_state: &mut GameState) {
-        game_state.players.0.initialize(vec![CardId(7001); 30]);
-        game_state.players.1.initialize(vec![CardId(7002); 30]);
+        game_state.players.0.initialize(vec![CardId(7001); 3]);
+        game_state.players.1.initialize(vec![CardId(7002); 3]);
         game_state.round = 0;
     }
 }
@@ -170,5 +175,16 @@ impl Action for BumpRound {
 
     fn perform(&self, game_state: &mut GameState) {
         game_state.round += 1;
+    }
+}
+
+/// 游戏结束
+pub struct GameFinished;
+
+impl Action for GameFinished {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        game_state.finished = true;
     }
 }

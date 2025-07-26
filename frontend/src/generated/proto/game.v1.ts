@@ -41,6 +41,7 @@ export interface GameState {
   readonly selfDeckCount: number;
   readonly otherDeckCount: number;
   readonly roundNumber: number;
+  readonly gameFinished: boolean;
 }
 
 export interface RequestUserEvent {
@@ -307,7 +308,7 @@ export const GameEvent: MessageFns<GameEvent> = {
 };
 
 function createBaseGameState(): GameState {
-  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0, roundNumber: 0 };
+  return { selfHand: [], otherHandCount: 0, selfDeckCount: 0, otherDeckCount: 0, roundNumber: 0, gameFinished: false };
 }
 
 export const GameState: MessageFns<GameState> = {
@@ -328,6 +329,9 @@ export const GameState: MessageFns<GameState> = {
     }
     if (message.roundNumber !== 0) {
       writer.uint32(40).uint32(message.roundNumber);
+    }
+    if (message.gameFinished !== false) {
+      writer.uint32(48).bool(message.gameFinished);
     }
     return writer;
   },
@@ -389,6 +393,14 @@ export const GameState: MessageFns<GameState> = {
           message.roundNumber = reader.uint32();
           continue;
         }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.gameFinished = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -408,6 +420,7 @@ export const GameState: MessageFns<GameState> = {
     message.selfDeckCount = object.selfDeckCount ?? 0;
     message.otherDeckCount = object.otherDeckCount ?? 0;
     message.roundNumber = object.roundNumber ?? 0;
+    message.gameFinished = object.gameFinished ?? false;
     return message;
   },
 };

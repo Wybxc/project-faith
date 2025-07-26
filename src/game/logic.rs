@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::task::JoinHandle;
 
 use crate::{
     game::{room::Room, state::*},
@@ -9,15 +8,30 @@ use crate::{
 };
 
 impl Room {
-    pub fn main_loop(self: Arc<Self>) -> JoinHandle<Result<()>> {
-        tokio::spawn(async move {
-            self.perform(Initalize);
-            loop {
-                self.turn(PlayerId::Player0).await?;
-                self.turn(PlayerId::Player1).await?;
-                self.perform(BumpRound);
+    pub async fn main_loop(self: Arc<Self>) -> Result<()> {
+        use PlayerId::{Player0, Player1};
+
+        self.perform(Initalize);
+
+        loop {
+            self.turn(Player0).await?;
+            self.turn(Player1).await?;
+
+            if self.read_state(|gs| {
+                gs.me(Player0).hand.is_empty()
+                    && gs.me(Player1).hand.is_empty()
+                    && gs.me(Player0).deck.is_empty()
+                    && gs.me(Player1).deck.is_empty()
+            }) {
+                break;
             }
-        })
+
+            self.perform(BumpRound);
+        }
+
+        self.perform(GameFinished);
+
+        Ok(())
     }
 
     async fn turn(self: &Arc<Self>, player: PlayerId) -> Result<()> {

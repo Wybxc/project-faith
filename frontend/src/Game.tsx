@@ -31,6 +31,7 @@ const Game: Component<{
     selfDeckCount: 0,
     otherDeckCount: 0,
     roundNumber: 0,
+    gameFinished: false,
   });
   const [userEvent, setUserEvent] = createSignal<RequestUserEvent | null>(null);
 
@@ -48,9 +49,22 @@ const Game: Component<{
   onCleanup(() => subscribe.unsubscribe());
 
   return (
-    <Show
-      when={!starting()}
+    <Switch
       fallback={
+        <GameBoard
+          state={state}
+          userEvent={userEvent()}
+          onFinishEvent={(event) => {
+            const seqnum = userEvent()?.seqnum;
+            if (event && seqnum) {
+              props.api.submitUserEvent(seqnum, event);
+            }
+            setUserEvent(null);
+          }}
+        />
+      }
+    >
+      <Match when={starting()}>
         <div>
           <p class={css({ textAlign: 'center', padding: '20px' })}>
             Waiting for game to start...
@@ -59,20 +73,13 @@ const Game: Component<{
             You are in room: {props.api.getRoomName()}
           </p>
         </div>
-      }
-    >
-      <GameBoard
-        state={state}
-        userEvent={userEvent()}
-        onFinishEvent={(event) => {
-          const seqnum = userEvent()?.seqnum;
-          if (event && seqnum) {
-            props.api.submitUserEvent(seqnum, event);
-          }
-          setUserEvent(null);
-        }}
-      />
-    </Show>
+      </Match>
+      <Match when={state.gameFinished}>
+        <div class={css({ textAlign: 'center', padding: '20px' })}>
+          <p>游戏已结束！</p>
+        </div>
+      </Match>
+    </Switch>
   );
 };
 
