@@ -6,7 +6,7 @@ use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::grpc::{auth_service_server::AuthServiceServer, game_service_server::GameServiceServer};
+use crate::grpc::*;
 
 mod auth;
 mod game;
@@ -54,8 +54,10 @@ async fn main() {
                 ]),
         )
         .layer(GrpcWebLayer::new())
-        .add_service(AuthServiceServer::new(auth::Auth))
-        .add_service(GameServiceServer::new(game::Game::default()))
+        .add_service(auth_service_server::AuthServiceServer::new(auth::Auth))
+        .add_service(game_service_server::GameServiceServer::new(
+            game::Game::default(),
+        ))
         .serve("[::1]:8617".parse().unwrap());
 
     tracing::info!("gRPC server listening on [::1]:8617");

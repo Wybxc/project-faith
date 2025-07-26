@@ -8,16 +8,17 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { grpc } from "@improbable-eng/grpc-web";
 import { BrowserHeaders } from "browser-headers";
+import Long from "long";
 
 export const protobufPackage = "auth.v1";
 
 export interface LoginRequest {
-  username: string;
+  readonly username: string;
 }
 
 export interface LoginResponse {
-  token: string;
-  message: string;
+  readonly token: string;
+  readonly message: string;
 }
 
 function createBaseLoginRequest(): LoginRequest {
@@ -35,7 +36,7 @@ export const LoginRequest: MessageFns<LoginRequest> = {
   decode(input: BinaryReader | Uint8Array, length?: number): LoginRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseLoginRequest();
+    const message = createBaseLoginRequest() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -56,23 +57,11 @@ export const LoginRequest: MessageFns<LoginRequest> = {
     return message;
   },
 
-  fromJSON(object: any): LoginRequest {
-    return { username: isSet(object.username) ? globalThis.String(object.username) : "" };
-  },
-
-  toJSON(message: LoginRequest): unknown {
-    const obj: any = {};
-    if (message.username !== "") {
-      obj.username = message.username;
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<LoginRequest>, I>>(base?: I): LoginRequest {
     return LoginRequest.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<LoginRequest>, I>>(object: I): LoginRequest {
-    const message = createBaseLoginRequest();
+    const message = createBaseLoginRequest() as any;
     message.username = object.username ?? "";
     return message;
   },
@@ -96,7 +85,7 @@ export const LoginResponse: MessageFns<LoginResponse> = {
   decode(input: BinaryReader | Uint8Array, length?: number): LoginResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseLoginResponse();
+    const message = createBaseLoginResponse() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -125,29 +114,11 @@ export const LoginResponse: MessageFns<LoginResponse> = {
     return message;
   },
 
-  fromJSON(object: any): LoginResponse {
-    return {
-      token: isSet(object.token) ? globalThis.String(object.token) : "",
-      message: isSet(object.message) ? globalThis.String(object.message) : "",
-    };
-  },
-
-  toJSON(message: LoginResponse): unknown {
-    const obj: any = {};
-    if (message.token !== "") {
-      obj.token = message.token;
-    }
-    if (message.message !== "") {
-      obj.message = message.message;
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<LoginResponse>, I>>(base?: I): LoginResponse {
     return LoginResponse.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<LoginResponse>, I>>(object: I): LoginResponse {
-    const message = createBaseLoginResponse();
+    const message = createBaseLoginResponse() as any;
     message.token = object.token ?? "";
     message.message = object.message ?? "";
     return message;
@@ -267,18 +238,16 @@ export class GrpcWebImpl {
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
 export type DeepPartial<T> = T extends Builtin ? T
-  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends Long ? string | number | Long : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
   : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { readonly $case: string; value: unknown }
+    ? { readonly $case: T["$case"]; value?: DeepPartial<T["value"]> }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
 
 type KeysOfUnion<T> = T extends T ? keyof T : never;
 export type Exact<P, I extends P> = P extends Builtin ? P
   : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
-
-function isSet(value: any): boolean {
-  return value !== null && value !== undefined;
-}
 
 export class GrpcWebError extends globalThis.Error {
   constructor(message: string, public code: grpc.Code, public metadata: grpc.Metadata) {
@@ -289,8 +258,6 @@ export class GrpcWebError extends globalThis.Error {
 export interface MessageFns<T> {
   encode(message: T, writer?: BinaryWriter): BinaryWriter;
   decode(input: BinaryReader | Uint8Array, length?: number): T;
-  fromJSON(object: any): T;
-  toJSON(message: T): unknown;
   create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
   fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

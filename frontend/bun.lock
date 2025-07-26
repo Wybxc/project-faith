@@ -6,6 +6,7 @@
       "dependencies": {
         "@improbable-eng/grpc-web": "^0.15.0",
         "browser-headers": "^0.4.1",
+        "long": "^5.3.2",
         "rxjs": "^7.8.2",
         "solid-js": "^1.9.5",
         "ts-proto": "^2.7.5",
@@ -499,6 +500,8 @@
     "lodash.truncate": ["lodash.truncate@4.4.2", "https://mirrors.huaweicloud.com/repository/npm/lodash.truncate/-/lodash.truncate-4.4.2.tgz", {}, "sha512-jttmRe7bRse52OsWIMDLaXxWqRAmtIUccAQ3garviCqJjafXOfNMO0yMfNpdD6zbGaTU0P5Nz7e7gAT6cKmJRw=="],
 
     "lodash.uniq": ["lodash.uniq@4.5.0", "https://mirrors.huaweicloud.com/repository/npm/lodash.uniq/-/lodash.uniq-4.5.0.tgz", {}, "sha512-xfBaXQd9ryd9dlSDvnvI0lvxfLJlYAZzXomUYzLKtUeOQvOP5piqAWuGtrhWeqaXK9hhoM/iyJc5AV+XfsX3HQ=="],
+
+    "long": ["long@5.3.2", "https://mirrors.huaweicloud.com/repository/npm/long/-/long-5.3.2.tgz", {}, "sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA=="],
 
     "look-it-up": ["look-it-up@2.1.0", "https://mirrors.huaweicloud.com/repository/npm/look-it-up/-/look-it-up-2.1.0.tgz", {}, "sha512-nMoGWW2HurtuJf6XAL56FWTDCWLOTSsanrgwOyaR5Y4e3zfG5N/0cU5xWZSEU3tBxhQugRbV1xL9jb+ug7yZww=="],
 

@@ -17,9 +17,14 @@ const Game: Component<{
   });
 
   const subscribe = props.api.enterGame().subscribe((event) => {
-    if (event.stateUpdate !== undefined) {
-      setState(reconcile(event.stateUpdate));
-      setWaiting(false);
+    switch (event?.$case) {
+      case 'stateUpdate':
+        setState(reconcile(event.value));
+        setWaiting(false);
+        break;
+      case 'requestUserEvent':
+        // Handle user event request
+        break;
     }
   });
   onCleanup(() => subscribe.unsubscribe());

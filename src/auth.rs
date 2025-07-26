@@ -1,12 +1,12 @@
 use base64::prelude::*;
 use tonic::{Request, Response, Status, async_trait};
 
-use crate::grpc::{LoginRequest, LoginResponse, auth_service_server::AuthService};
+use crate::grpc::*;
 
 pub struct Auth;
 
 #[async_trait]
-impl AuthService for Auth {
+impl auth_service_server::AuthService for Auth {
     async fn login(
         &self,
         request: Request<LoginRequest>,

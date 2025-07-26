@@ -3,7 +3,7 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 use base64::prelude::*;
 use futures::{Stream, StreamExt};
 use parking_lot::Mutex;
-use sharded_slab::Slab;
+use sharded_slab::{Entry, Slab};
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 
@@ -15,7 +15,9 @@ use crate::{
     grpc::*,
 };
 
+mod user;
 mod card;
+mod logic;
 mod player;
 mod room;
 mod state;
@@ -43,11 +45,9 @@ impl Game {
         Ok(username)
     }
 
-    fn room(&self, room_id: usize) -> Result<Arc<Room>, Status> {
+    fn room(&self, room_id: usize) -> Result<Entry<Arc<Room>>, Status> {
         self.rooms
             .get(room_id)
-            .as_deref()
-            .cloned()
             .ok_or(Status::internal("Room not found"))
     }
 }
@@ -74,7 +74,7 @@ impl game_service_server::GameService for Game {
             tracing::info!("Created new room: {}, player: {}", room_name, username);
             return Ok(Response::new(JoinRoomResponse {
                 message: format!("Created room: {room_name}"),
-                room_id: room_id.to_string(),
+                room_id: room_id as u64,
                 success: true,
             }));
         }
@@ -88,7 +88,7 @@ impl game_service_server::GameService for Game {
         if room.check_in_room(&username) {
             return Ok(Response::new(JoinRoomResponse {
                 message: "Already in the room".to_string(),
-                room_id: room_id.to_string(),
+                room_id: room_id as u64,
                 success: true,
             }));
         }
@@ -106,11 +106,11 @@ impl game_service_server::GameService for Game {
         tracing::info!("Player {} joined room: {}", username, room_name);
         drop(state); // Release the lock before sending
 
-        let _handle = room.game_start(); // TODO: avoid memory leak
+        let _handle = room.clone().main_loop(); // TODO: avoid memory leak
 
         Ok(Response::new(JoinRoomResponse {
             message: format!("Joined room: {room_id}"),
-            room_id: room_id.to_string(),
+            room_id: room_id as u64,
             success: true,
         }))
     }
@@ -123,10 +123,7 @@ impl game_service_server::GameService for Game {
     ) -> Result<Response<Self::EnterGameStream>, Status> {
         let username = self.auth(request.metadata())?;
 
-        let room_id = request.into_inner().room_id;
-        let room_id = room_id
-            .parse()
-            .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
+        let room_id = request.into_inner().room_id as usize;
         let room = self.room(room_id)?;
 
         let events = room.get_sender(&username)?.subscribe();
@@ -139,18 +136,20 @@ impl game_service_server::GameService for Game {
         Ok(Response::new(events))
     }
 
-    async fn ping(&self, request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
+    async fn submit_user_event(
+        &self,
+        request: Request<UserEvent>,
+    ) -> Result<Response<UserEventResponse>, Status> {
         let _username = self.auth(request.metadata())?;
 
-        let room_id = request.into_inner().room_id;
-        tracing::debug!("Received ping for room ID: {}", room_id);
-        let room_id = room_id
-            .parse()
-            .map_err(|_| Status::invalid_argument("Invalid room ID"))?;
+        let request = request.into_inner();
+        let room_id = request.room_id as usize;
         let room = self.room(room_id)?;
 
-        room.sync_game_state()?;
-
-        Ok(Response::new(PingResponse {}))
+        let Some(event) = request.event_type else {
+            return Err(Status::invalid_argument("Event type is required"));
+        };
+        room.submit_user_event(request.seqnum as usize, event)?;
+        Ok(Response::new(UserEventResponse {}))
     }
 }

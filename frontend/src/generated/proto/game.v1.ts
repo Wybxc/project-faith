@@ -8,42 +8,60 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { grpc } from "@improbable-eng/grpc-web";
 import { BrowserHeaders } from "browser-headers";
+import Long from "long";
 import { Observable } from "rxjs";
 import { share } from "rxjs/operators";
 
 export const protobufPackage = "game.v1";
 
 export interface JoinRoomRequest {
-  roomName: string;
+  readonly roomName: string;
 }
 
 export interface JoinRoomResponse {
-  message: string;
-  success: boolean;
-  roomId: string;
+  readonly message: string;
+  readonly success: boolean;
+  readonly roomId: Long;
 }
 
 export interface EnterGameRequest {
-  roomId: string;
+  readonly roomId: Long;
 }
 
 export interface GameEvent {
-  stateUpdate?: GameState | undefined;
-}
-
-export interface PingRequest {
-  roomId: string;
-}
-
-export interface PingResponse {
+  readonly eventType?: { readonly $case: "stateUpdate"; readonly value: GameState } | {
+    readonly $case: "requestUserEvent";
+    readonly value: RequestUserEvent;
+  } | undefined;
 }
 
 export interface GameState {
-  selfHand: number[];
-  otherHandCount: number;
-  selfDeckCount: number;
-  otherDeckCount: number;
-  roundNumber: number;
+  readonly selfHand: readonly number[];
+  readonly otherHandCount: number;
+  readonly selfDeckCount: number;
+  readonly otherDeckCount: number;
+  readonly roundNumber: number;
+}
+
+export interface RequestUserEvent {
+  readonly seqnum: Long;
+  readonly eventType?: { readonly $case: "playCard"; readonly value: RequestPlayCard } | undefined;
+}
+
+export interface UserEvent {
+  readonly seqnum: Long;
+  readonly roomId: Long;
+  readonly eventType?: { readonly $case: "playCard"; readonly value: PlayCard } | undefined;
+}
+
+export interface UserEventResponse {
+}
+
+export interface RequestPlayCard {
+}
+
+export interface PlayCard {
+  readonly cardIdx: number;
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -61,7 +79,7 @@ export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
   decode(input: BinaryReader | Uint8Array, length?: number): JoinRoomRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseJoinRoomRequest();
+    const message = createBaseJoinRoomRequest() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -82,30 +100,18 @@ export const JoinRoomRequest: MessageFns<JoinRoomRequest> = {
     return message;
   },
 
-  fromJSON(object: any): JoinRoomRequest {
-    return { roomName: isSet(object.roomName) ? globalThis.String(object.roomName) : "" };
-  },
-
-  toJSON(message: JoinRoomRequest): unknown {
-    const obj: any = {};
-    if (message.roomName !== "") {
-      obj.roomName = message.roomName;
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<JoinRoomRequest>, I>>(base?: I): JoinRoomRequest {
     return JoinRoomRequest.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<JoinRoomRequest>, I>>(object: I): JoinRoomRequest {
-    const message = createBaseJoinRoomRequest();
+    const message = createBaseJoinRoomRequest() as any;
     message.roomName = object.roomName ?? "";
     return message;
   },
 };
 
 function createBaseJoinRoomResponse(): JoinRoomResponse {
-  return { message: "", success: false, roomId: "" };
+  return { message: "", success: false, roomId: Long.UZERO };
 }
 
 export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
@@ -116,8 +122,8 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     if (message.success !== false) {
       writer.uint32(16).bool(message.success);
     }
-    if (message.roomId !== "") {
-      writer.uint32(26).string(message.roomId);
+    if (!message.roomId.equals(Long.UZERO)) {
+      writer.uint32(25).fixed64(message.roomId.toString());
     }
     return writer;
   },
@@ -125,7 +131,7 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
   decode(input: BinaryReader | Uint8Array, length?: number): JoinRoomResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseJoinRoomResponse();
+    const message = createBaseJoinRoomResponse() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -146,11 +152,11 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
           continue;
         }
         case 3: {
-          if (tag !== 26) {
+          if (tag !== 25) {
             break;
           }
 
-          message.roomId = reader.string();
+          message.roomId = Long.fromString(reader.fixed64().toString(), true);
           continue;
         }
       }
@@ -162,48 +168,28 @@ export const JoinRoomResponse: MessageFns<JoinRoomResponse> = {
     return message;
   },
 
-  fromJSON(object: any): JoinRoomResponse {
-    return {
-      message: isSet(object.message) ? globalThis.String(object.message) : "",
-      success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
-      roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "",
-    };
-  },
-
-  toJSON(message: JoinRoomResponse): unknown {
-    const obj: any = {};
-    if (message.message !== "") {
-      obj.message = message.message;
-    }
-    if (message.success !== false) {
-      obj.success = message.success;
-    }
-    if (message.roomId !== "") {
-      obj.roomId = message.roomId;
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<JoinRoomResponse>, I>>(base?: I): JoinRoomResponse {
     return JoinRoomResponse.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<JoinRoomResponse>, I>>(object: I): JoinRoomResponse {
-    const message = createBaseJoinRoomResponse();
+    const message = createBaseJoinRoomResponse() as any;
     message.message = object.message ?? "";
     message.success = object.success ?? false;
-    message.roomId = object.roomId ?? "";
+    message.roomId = (object.roomId !== undefined && object.roomId !== null)
+      ? Long.fromValue(object.roomId)
+      : Long.UZERO;
     return message;
   },
 };
 
 function createBaseEnterGameRequest(): EnterGameRequest {
-  return { roomId: "" };
+  return { roomId: Long.UZERO };
 }
 
 export const EnterGameRequest: MessageFns<EnterGameRequest> = {
   encode(message: EnterGameRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.roomId !== "") {
-      writer.uint32(10).string(message.roomId);
+    if (!message.roomId.equals(Long.UZERO)) {
+      writer.uint32(9).fixed64(message.roomId.toString());
     }
     return writer;
   },
@@ -211,16 +197,16 @@ export const EnterGameRequest: MessageFns<EnterGameRequest> = {
   decode(input: BinaryReader | Uint8Array, length?: number): EnterGameRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseEnterGameRequest();
+    const message = createBaseEnterGameRequest() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1: {
-          if (tag !== 10) {
+          if (tag !== 9) {
             break;
           }
 
-          message.roomId = reader.string();
+          message.roomId = Long.fromString(reader.fixed64().toString(), true);
           continue;
         }
       }
@@ -232,36 +218,31 @@ export const EnterGameRequest: MessageFns<EnterGameRequest> = {
     return message;
   },
 
-  fromJSON(object: any): EnterGameRequest {
-    return { roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "" };
-  },
-
-  toJSON(message: EnterGameRequest): unknown {
-    const obj: any = {};
-    if (message.roomId !== "") {
-      obj.roomId = message.roomId;
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<EnterGameRequest>, I>>(base?: I): EnterGameRequest {
     return EnterGameRequest.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<EnterGameRequest>, I>>(object: I): EnterGameRequest {
-    const message = createBaseEnterGameRequest();
-    message.roomId = object.roomId ?? "";
+    const message = createBaseEnterGameRequest() as any;
+    message.roomId = (object.roomId !== undefined && object.roomId !== null)
+      ? Long.fromValue(object.roomId)
+      : Long.UZERO;
     return message;
   },
 };
 
 function createBaseGameEvent(): GameEvent {
-  return { stateUpdate: undefined };
+  return { eventType: undefined };
 }
 
 export const GameEvent: MessageFns<GameEvent> = {
   encode(message: GameEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.stateUpdate !== undefined) {
-      GameState.encode(message.stateUpdate, writer.uint32(10).fork()).join();
+    switch (message.eventType?.$case) {
+      case "stateUpdate":
+        GameState.encode(message.eventType.value, writer.uint32(10).fork()).join();
+        break;
+      case "requestUserEvent":
+        RequestUserEvent.encode(message.eventType.value, writer.uint32(18).fork()).join();
+        break;
     }
     return writer;
   },
@@ -269,7 +250,7 @@ export const GameEvent: MessageFns<GameEvent> = {
   decode(input: BinaryReader | Uint8Array, length?: number): GameEvent {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseGameEvent();
+    const message = createBaseGameEvent() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -278,7 +259,15 @@ export const GameEvent: MessageFns<GameEvent> = {
             break;
           }
 
-          message.stateUpdate = GameState.decode(reader, reader.uint32());
+          message.eventType = { $case: "stateUpdate", value: GameState.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.eventType = { $case: "requestUserEvent", value: RequestUserEvent.decode(reader, reader.uint32()) };
           continue;
         }
       }
@@ -288,129 +277,30 @@ export const GameEvent: MessageFns<GameEvent> = {
       reader.skip(tag & 7);
     }
     return message;
-  },
-
-  fromJSON(object: any): GameEvent {
-    return { stateUpdate: isSet(object.stateUpdate) ? GameState.fromJSON(object.stateUpdate) : undefined };
-  },
-
-  toJSON(message: GameEvent): unknown {
-    const obj: any = {};
-    if (message.stateUpdate !== undefined) {
-      obj.stateUpdate = GameState.toJSON(message.stateUpdate);
-    }
-    return obj;
   },
 
   create<I extends Exact<DeepPartial<GameEvent>, I>>(base?: I): GameEvent {
     return GameEvent.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<GameEvent>, I>>(object: I): GameEvent {
-    const message = createBaseGameEvent();
-    message.stateUpdate = (object.stateUpdate !== undefined && object.stateUpdate !== null)
-      ? GameState.fromPartial(object.stateUpdate)
-      : undefined;
-    return message;
-  },
-};
-
-function createBasePingRequest(): PingRequest {
-  return { roomId: "" };
-}
-
-export const PingRequest: MessageFns<PingRequest> = {
-  encode(message: PingRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.roomId !== "") {
-      writer.uint32(10).string(message.roomId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): PingRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBasePingRequest();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.roomId = reader.string();
-          continue;
+    const message = createBaseGameEvent() as any;
+    switch (object.eventType?.$case) {
+      case "stateUpdate": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "stateUpdate", value: GameState.fromPartial(object.eventType.value) };
         }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
         break;
       }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): PingRequest {
-    return { roomId: isSet(object.roomId) ? globalThis.String(object.roomId) : "" };
-  },
-
-  toJSON(message: PingRequest): unknown {
-    const obj: any = {};
-    if (message.roomId !== "") {
-      obj.roomId = message.roomId;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<PingRequest>, I>>(base?: I): PingRequest {
-    return PingRequest.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<PingRequest>, I>>(object: I): PingRequest {
-    const message = createBasePingRequest();
-    message.roomId = object.roomId ?? "";
-    return message;
-  },
-};
-
-function createBasePingResponse(): PingResponse {
-  return {};
-}
-
-export const PingResponse: MessageFns<PingResponse> = {
-  encode(_: PingResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): PingResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBasePingResponse();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-      }
-      if ((tag & 7) === 4 || tag === 0) {
+      case "requestUserEvent": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = {
+            $case: "requestUserEvent",
+            value: RequestUserEvent.fromPartial(object.eventType.value),
+          };
+        }
         break;
       }
-      reader.skip(tag & 7);
     }
-    return message;
-  },
-
-  fromJSON(_: any): PingResponse {
-    return {};
-  },
-
-  toJSON(_: PingResponse): unknown {
-    const obj: any = {};
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<PingResponse>, I>>(base?: I): PingResponse {
-    return PingResponse.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<PingResponse>, I>>(_: I): PingResponse {
-    const message = createBasePingResponse();
     return message;
   },
 };
@@ -444,7 +334,7 @@ export const GameState: MessageFns<GameState> = {
   decode(input: BinaryReader | Uint8Array, length?: number): GameState {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseGameState();
+    const message = createBaseGameState() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -507,41 +397,11 @@ export const GameState: MessageFns<GameState> = {
     return message;
   },
 
-  fromJSON(object: any): GameState {
-    return {
-      selfHand: globalThis.Array.isArray(object?.selfHand) ? object.selfHand.map((e: any) => globalThis.Number(e)) : [],
-      otherHandCount: isSet(object.otherHandCount) ? globalThis.Number(object.otherHandCount) : 0,
-      selfDeckCount: isSet(object.selfDeckCount) ? globalThis.Number(object.selfDeckCount) : 0,
-      otherDeckCount: isSet(object.otherDeckCount) ? globalThis.Number(object.otherDeckCount) : 0,
-      roundNumber: isSet(object.roundNumber) ? globalThis.Number(object.roundNumber) : 0,
-    };
-  },
-
-  toJSON(message: GameState): unknown {
-    const obj: any = {};
-    if (message.selfHand?.length) {
-      obj.selfHand = message.selfHand.map((e) => Math.round(e));
-    }
-    if (message.otherHandCount !== 0) {
-      obj.otherHandCount = Math.round(message.otherHandCount);
-    }
-    if (message.selfDeckCount !== 0) {
-      obj.selfDeckCount = Math.round(message.selfDeckCount);
-    }
-    if (message.otherDeckCount !== 0) {
-      obj.otherDeckCount = Math.round(message.otherDeckCount);
-    }
-    if (message.roundNumber !== 0) {
-      obj.roundNumber = Math.round(message.roundNumber);
-    }
-    return obj;
-  },
-
   create<I extends Exact<DeepPartial<GameState>, I>>(base?: I): GameState {
     return GameState.fromPartial(base ?? ({} as any));
   },
   fromPartial<I extends Exact<DeepPartial<GameState>, I>>(object: I): GameState {
-    const message = createBaseGameState();
+    const message = createBaseGameState() as any;
     message.selfHand = object.selfHand?.map((e) => e) || [];
     message.otherHandCount = object.otherHandCount ?? 0;
     message.selfDeckCount = object.selfDeckCount ?? 0;
@@ -551,10 +411,276 @@ export const GameState: MessageFns<GameState> = {
   },
 };
 
+function createBaseRequestUserEvent(): RequestUserEvent {
+  return { seqnum: Long.UZERO, eventType: undefined };
+}
+
+export const RequestUserEvent: MessageFns<RequestUserEvent> = {
+  encode(message: RequestUserEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (!message.seqnum.equals(Long.UZERO)) {
+      writer.uint32(9).fixed64(message.seqnum.toString());
+    }
+    switch (message.eventType?.$case) {
+      case "playCard":
+        RequestPlayCard.encode(message.eventType.value, writer.uint32(26).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestUserEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRequestUserEvent() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.seqnum = Long.fromString(reader.fixed64().toString(), true);
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.eventType = { $case: "playCard", value: RequestPlayCard.decode(reader, reader.uint32()) };
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<RequestUserEvent>, I>>(base?: I): RequestUserEvent {
+    return RequestUserEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RequestUserEvent>, I>>(object: I): RequestUserEvent {
+    const message = createBaseRequestUserEvent() as any;
+    message.seqnum = (object.seqnum !== undefined && object.seqnum !== null)
+      ? Long.fromValue(object.seqnum)
+      : Long.UZERO;
+    switch (object.eventType?.$case) {
+      case "playCard": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "playCard", value: RequestPlayCard.fromPartial(object.eventType.value) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseUserEvent(): UserEvent {
+  return { seqnum: Long.UZERO, roomId: Long.UZERO, eventType: undefined };
+}
+
+export const UserEvent: MessageFns<UserEvent> = {
+  encode(message: UserEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (!message.seqnum.equals(Long.UZERO)) {
+      writer.uint32(9).fixed64(message.seqnum.toString());
+    }
+    if (!message.roomId.equals(Long.UZERO)) {
+      writer.uint32(17).fixed64(message.roomId.toString());
+    }
+    switch (message.eventType?.$case) {
+      case "playCard":
+        PlayCard.encode(message.eventType.value, writer.uint32(26).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UserEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUserEvent() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.seqnum = Long.fromString(reader.fixed64().toString(), true);
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.roomId = Long.fromString(reader.fixed64().toString(), true);
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.eventType = { $case: "playCard", value: PlayCard.decode(reader, reader.uint32()) };
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<UserEvent>, I>>(base?: I): UserEvent {
+    return UserEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UserEvent>, I>>(object: I): UserEvent {
+    const message = createBaseUserEvent() as any;
+    message.seqnum = (object.seqnum !== undefined && object.seqnum !== null)
+      ? Long.fromValue(object.seqnum)
+      : Long.UZERO;
+    message.roomId = (object.roomId !== undefined && object.roomId !== null)
+      ? Long.fromValue(object.roomId)
+      : Long.UZERO;
+    switch (object.eventType?.$case) {
+      case "playCard": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "playCard", value: PlayCard.fromPartial(object.eventType.value) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseUserEventResponse(): UserEventResponse {
+  return {};
+}
+
+export const UserEventResponse: MessageFns<UserEventResponse> = {
+  encode(_: UserEventResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UserEventResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUserEventResponse() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<UserEventResponse>, I>>(base?: I): UserEventResponse {
+    return UserEventResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UserEventResponse>, I>>(_: I): UserEventResponse {
+    const message = createBaseUserEventResponse() as any;
+    return message;
+  },
+};
+
+function createBaseRequestPlayCard(): RequestPlayCard {
+  return {};
+}
+
+export const RequestPlayCard: MessageFns<RequestPlayCard> = {
+  encode(_: RequestPlayCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestPlayCard {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRequestPlayCard() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<RequestPlayCard>, I>>(base?: I): RequestPlayCard {
+    return RequestPlayCard.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RequestPlayCard>, I>>(_: I): RequestPlayCard {
+    const message = createBaseRequestPlayCard() as any;
+    return message;
+  },
+};
+
+function createBasePlayCard(): PlayCard {
+  return { cardIdx: 0 };
+}
+
+export const PlayCard: MessageFns<PlayCard> = {
+  encode(message: PlayCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cardIdx !== 0) {
+      writer.uint32(8).uint32(message.cardIdx);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlayCard {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePlayCard() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.cardIdx = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<PlayCard>, I>>(base?: I): PlayCard {
+    return PlayCard.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlayCard>, I>>(object: I): PlayCard {
+    const message = createBasePlayCard() as any;
+    message.cardIdx = object.cardIdx ?? 0;
+    return message;
+  },
+};
+
 export interface GameService {
   JoinRoom(request: DeepPartial<JoinRoomRequest>, metadata?: grpc.Metadata): Promise<JoinRoomResponse>;
   EnterGame(request: DeepPartial<EnterGameRequest>, metadata?: grpc.Metadata): Observable<GameEvent>;
-  Ping(request: DeepPartial<PingRequest>, metadata?: grpc.Metadata): Promise<PingResponse>;
+  SubmitUserEvent(request: DeepPartial<UserEvent>, metadata?: grpc.Metadata): Promise<UserEventResponse>;
 }
 
 export class GameServiceClientImpl implements GameService {
@@ -564,7 +690,7 @@ export class GameServiceClientImpl implements GameService {
     this.rpc = rpc;
     this.JoinRoom = this.JoinRoom.bind(this);
     this.EnterGame = this.EnterGame.bind(this);
-    this.Ping = this.Ping.bind(this);
+    this.SubmitUserEvent = this.SubmitUserEvent.bind(this);
   }
 
   JoinRoom(request: DeepPartial<JoinRoomRequest>, metadata?: grpc.Metadata): Promise<JoinRoomResponse> {
@@ -575,8 +701,8 @@ export class GameServiceClientImpl implements GameService {
     return this.rpc.invoke(GameServiceEnterGameDesc, EnterGameRequest.fromPartial(request), metadata);
   }
 
-  Ping(request: DeepPartial<PingRequest>, metadata?: grpc.Metadata): Promise<PingResponse> {
-    return this.rpc.unary(GameServicePingDesc, PingRequest.fromPartial(request), metadata);
+  SubmitUserEvent(request: DeepPartial<UserEvent>, metadata?: grpc.Metadata): Promise<UserEventResponse> {
+    return this.rpc.unary(GameServiceSubmitUserEventDesc, UserEvent.fromPartial(request), metadata);
   }
 }
 
@@ -628,19 +754,19 @@ export const GameServiceEnterGameDesc: UnaryMethodDefinitionish = {
   } as any,
 };
 
-export const GameServicePingDesc: UnaryMethodDefinitionish = {
-  methodName: "Ping",
+export const GameServiceSubmitUserEventDesc: UnaryMethodDefinitionish = {
+  methodName: "SubmitUserEvent",
   service: GameServiceDesc,
   requestStream: false,
   responseStream: false,
   requestType: {
     serializeBinary() {
-      return PingRequest.encode(this).finish();
+      return UserEvent.encode(this).finish();
     },
   } as any,
   responseType: {
     deserializeBinary(data: Uint8Array) {
-      const value = PingResponse.decode(data);
+      const value = UserEventResponse.decode(data);
       return {
         ...value,
         toObject() {
@@ -767,18 +893,16 @@ export class GrpcWebImpl {
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
 export type DeepPartial<T> = T extends Builtin ? T
-  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends Long ? string | number | Long : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
   : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { readonly $case: string; value: unknown }
+    ? { readonly $case: T["$case"]; value?: DeepPartial<T["value"]> }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
 
 type KeysOfUnion<T> = T extends T ? keyof T : never;
 export type Exact<P, I extends P> = P extends Builtin ? P
   : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
-
-function isSet(value: any): boolean {
-  return value !== null && value !== undefined;
-}
 
 export class GrpcWebError extends globalThis.Error {
   constructor(message: string, public code: grpc.Code, public metadata: grpc.Metadata) {
@@ -789,8 +913,6 @@ export class GrpcWebError extends globalThis.Error {
 export interface MessageFns<T> {
   encode(message: T, writer?: BinaryWriter): BinaryWriter;
   decode(input: BinaryReader | Uint8Array, length?: number): T;
-  fromJSON(object: any): T;
-  toJSON(message: T): unknown;
   create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
   fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

@@ -1,17 +1,21 @@
-use std::sync::Arc;
-
 use parking_lot::Mutex;
-use tokio::{sync::broadcast, task::JoinHandle};
+use sharded_slab::Slab;
+use tokio::sync::{broadcast, oneshot};
 use tonic::Status;
 
 use crate::{
-    game::state::{Action, GameState, PlayerId},
-    grpc::{GameEvent, game_event::EventType},
+    game::{
+        state::{Action, GameState, PlayerId},
+        user::UserEvent,
+    },
+    grpc::*,
 };
 
 pub struct Room {
     p0_sender: broadcast::Sender<GameEvent>,
     p1_sender: broadcast::Sender<GameEvent>,
+
+    user_events: Slab<oneshot::Sender<user_event::EventType>>,
 
     pub state: Mutex<RoomState>,
 }
@@ -23,6 +27,7 @@ impl Room {
         Self {
             p0_sender,
             p1_sender,
+            user_events: Slab::new(),
             state: Mutex::new(RoomState::Waiting { p0_username }),
         }
     }
@@ -54,10 +59,10 @@ impl Room {
         let p0_game_state = game.to_client(PlayerId::Player0);
         let p1_game_state = game.to_client(PlayerId::Player1);
         let _ = self.p0_sender.send(GameEvent {
-            event_type: Some(EventType::StateUpdate(p0_game_state)),
+            event_type: Some(game_event::EventType::StateUpdate(p0_game_state)),
         });
         let _ = self.p1_sender.send(GameEvent {
-            event_type: Some(EventType::StateUpdate(p1_game_state)),
+            event_type: Some(game_event::EventType::StateUpdate(p1_game_state)),
         });
         Ok(())
     }
@@ -74,16 +79,53 @@ impl Room {
         Ok(())
     }
 
-    pub fn game_start(self: Arc<Self>) -> JoinHandle<Result<(), Status>> {
-        tokio::spawn(async move {
-            self.perform(Action::Initalize)?;
-            loop {
-                self.perform(Action::DrawCard(PlayerId::Player0, 1))?;
-                self.perform(Action::DrawCard(PlayerId::Player1, 1))?;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                self.perform(Action::BumpRound)?;
+    pub async fn request_user_event<E: UserEvent>(
+        &self,
+        player: PlayerId,
+        request: E,
+    ) -> Result<Option<E::Response>, Status> {
+        let event_sender = match player {
+            PlayerId::Player0 => &self.p0_sender,
+            PlayerId::Player1 => &self.p1_sender,
+        };
+
+        let (sender, receiver) = oneshot::channel();
+        let seqnum = self
+            .user_events
+            .insert(sender)
+            .expect("Failed to insert user event sender");
+
+        let _ = event_sender.send(GameEvent {
+            event_type: Some(game_event::EventType::RequestUserEvent(RequestUserEvent {
+                seqnum: seqnum as u64,
+                event_type: Some(request.into_rpc()),
+            })),
+        });
+
+        tokio::select! {
+            response = receiver => {
+                if let Ok(event_type) = response {
+                    Ok(Some(E::from_rpc(event_type)?))
+                } else {
+                    Ok(None)
+                }
             }
-        })
+            _ = tokio::time::sleep(std::time::Duration::from_secs(21)) => {
+                Ok(None) // Timeout
+            }
+        }
+    }
+
+    pub fn submit_user_event(
+        &self,
+        seqnum: usize,
+        event_type: user_event::EventType,
+    ) -> Result<(), Status> {
+        let Some(ch) = self.user_events.take(seqnum) else {
+            return Err(Status::not_found("User event not found"));
+        };
+        let _ = ch.send(event_type);
+        Ok(())
     }
 }
 
