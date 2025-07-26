@@ -15,11 +15,11 @@ message JoinRoomRequest {
 message JoinRoomResponse {
     string message = 1;
     bool success = 2;
-    fixed64 room_id = 3 [jstype = JS_STRING];
+    fixed64 room_id = 3;
 }
 
 message EnterGameRequest {
-    fixed64 room_id = 1 [jstype = JS_STRING];
+    fixed64 room_id = 1;
 }
 
 message GameEvent {
@@ -38,15 +38,16 @@ message GameState {
 }
 
 message RequestUserEvent {
-    fixed64 seqnum = 1 [jstype = JS_STRING];
+    fixed64 seqnum = 1;
+    int32 timeout = 2;
     oneof event_type {
         RequestPlayCard play_card = 3;
     }
 }
 
 message UserEvent {
-    fixed64 seqnum = 1 [jstype = JS_STRING];
-    fixed64 room_id = 2 [jstype = JS_STRING];
+    fixed64 seqnum = 1;
+    fixed64 room_id = 2;
     oneof event_type {
         PlayCard play_card = 3;
     }

@@ -45,6 +45,7 @@ export interface GameState {
 
 export interface RequestUserEvent {
   readonly seqnum: Long;
+  readonly timeout: number;
   readonly eventType?: { readonly $case: "playCard"; readonly value: RequestPlayCard } | undefined;
 }
 
@@ -412,13 +413,16 @@ export const GameState: MessageFns<GameState> = {
 };
 
 function createBaseRequestUserEvent(): RequestUserEvent {
-  return { seqnum: Long.UZERO, eventType: undefined };
+  return { seqnum: Long.UZERO, timeout: 0, eventType: undefined };
 }
 
 export const RequestUserEvent: MessageFns<RequestUserEvent> = {
   encode(message: RequestUserEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (!message.seqnum.equals(Long.UZERO)) {
       writer.uint32(9).fixed64(message.seqnum.toString());
+    }
+    if (message.timeout !== 0) {
+      writer.uint32(16).int32(message.timeout);
     }
     switch (message.eventType?.$case) {
       case "playCard":
@@ -441,6 +445,14 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
           }
 
           message.seqnum = Long.fromString(reader.fixed64().toString(), true);
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.timeout = reader.int32();
           continue;
         }
         case 3: {
@@ -468,6 +480,7 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
     message.seqnum = (object.seqnum !== undefined && object.seqnum !== null)
       ? Long.fromValue(object.seqnum)
       : Long.UZERO;
+    message.timeout = object.timeout ?? 0;
     switch (object.eventType?.$case) {
       case "playCard": {
         if (object.eventType?.value !== undefined && object.eventType?.value !== null) {

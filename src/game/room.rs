@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use parking_lot::Mutex;
 use sharded_slab::Slab;
 use tokio::sync::{broadcast, oneshot};
@@ -16,6 +18,8 @@ pub struct Room {
     p1_sender: broadcast::Sender<GameEvent>,
 
     user_events: Slab<oneshot::Sender<user_event::EventType>>,
+    p0_pending_event: Mutex<Option<RequestUserEvent>>,
+    p1_pending_event: Mutex<Option<RequestUserEvent>>,
 
     pub state: Mutex<RoomState>,
 }
@@ -28,6 +32,8 @@ impl Room {
             p0_sender,
             p1_sender,
             user_events: Slab::new(),
+            p0_pending_event: Mutex::new(None),
+            p1_pending_event: Mutex::new(None),
             state: Mutex::new(RoomState::Waiting { p0_username }),
         }
     }
@@ -40,13 +46,19 @@ impl Room {
         }
     }
 
-    pub fn get_sender(&self, username: &str) -> Result<&broadcast::Sender<GameEvent>, Status> {
+    pub fn get_player(&self, username: &str) -> Result<PlayerId, Status> {
         match &*self.state.lock() {
-            RoomState::Waiting { p0_username } if p0_username == username => Ok(&self.p0_sender),
-            RoomState::Playing(rg) if rg.is_player0(username) => Ok(&self.p0_sender),
-            RoomState::Playing(rg) if rg.is_player1(username) => Ok(&self.p1_sender),
-            RoomState::Finished => Err(Status::failed_precondition("Game finished")),
-            _ => Err(Status::failed_precondition("Not a player")),
+            RoomState::Waiting { p0_username } if p0_username == username => Ok(PlayerId::Player0),
+            RoomState::Playing(rg) if rg.is_player0(username) => Ok(PlayerId::Player0),
+            RoomState::Playing(rg) if rg.is_player1(username) => Ok(PlayerId::Player1),
+            _ => Err(Status::failed_precondition("Not a player in this room")),
+        }
+    }
+
+    pub fn get_sender(&self, username: &str) -> Result<&broadcast::Sender<GameEvent>, Status> {
+        match self.get_player(username)? {
+            PlayerId::Player0 => Ok(&self.p0_sender),
+            PlayerId::Player1 => Ok(&self.p1_sender),
         }
     }
 
@@ -68,19 +80,20 @@ impl Room {
     }
 
     pub fn perform(&self, action: Action) -> Result<(), Status> {
-        let mut state = self.state.lock();
-        let RoomState::Playing(game) = &mut *state else {
-            return Err(Status::failed_precondition("Game not in progress"));
-        };
-        game.perform(action);
-        drop(state); // Release the lock before sending
+        {
+            let mut state = self.state.lock();
+            let RoomState::Playing(game) = &mut *state else {
+                return Err(Status::failed_precondition("Game not in progress"));
+            };
+            game.perform(action);
+        }
 
         self.sync_game_state()?;
         Ok(())
     }
 
     pub async fn request_user_event<E: UserEvent>(
-        &self,
+        self: &Arc<Self>,
         player: PlayerId,
         request: E,
     ) -> Result<Option<E::Response>, Status> {
@@ -95,14 +108,45 @@ impl Room {
             .insert(sender)
             .expect("Failed to insert user event sender");
 
+        let timeout = 20;
+
+        let request = RequestUserEvent {
+            seqnum: seqnum as u64,
+            timeout,
+            event_type: Some(request.into_rpc()),
+        };
         let _ = event_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::RequestUserEvent(RequestUserEvent {
-                seqnum: seqnum as u64,
-                event_type: Some(request.into_rpc()),
-            })),
+            event_type: Some(game_event::EventType::RequestUserEvent(request)),
         });
 
-        tokio::select! {
+        {
+            let mut pending_event = match player {
+                PlayerId::Player0 => self.p0_pending_event.lock(),
+                PlayerId::Player1 => self.p1_pending_event.lock(),
+            };
+            *pending_event = Some(request);
+        }
+
+        let this = Arc::clone(self);
+        let countdown = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                let mut pending_event = match player {
+                    PlayerId::Player0 => this.p0_pending_event.lock(),
+                    PlayerId::Player1 => this.p1_pending_event.lock(),
+                };
+                if let Some(req) = pending_event.as_mut() {
+                    req.timeout -= 1;
+                    // Client timeout is 1 second shorter than server timeout
+                    if req.timeout <= -1 {
+                        break; // Timeout reached, exit countdown
+                    }
+                } else {
+                    break; // No pending event, exit countdown
+                }
+            }
+        });
+        let response = tokio::select! {
             response = receiver => {
                 if let Ok(event_type) = response {
                     Ok(Some(E::from_rpc(event_type)?))
@@ -110,10 +154,41 @@ impl Room {
                     Ok(None)
                 }
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(21)) => {
-                Ok(None) // Timeout
+            _ = countdown => {
+                Ok(None) // Timeout reached, return None
             }
+        };
+
+        {
+            let mut pending_event = match player {
+                PlayerId::Player0 => self.p0_pending_event.lock(),
+                PlayerId::Player1 => self.p1_pending_event.lock(),
+            };
+            *pending_event = None; // Clear the pending event after response or timeout
         }
+
+        response
+    }
+
+    pub fn send_pending_event(&self, username: &str) -> Result<(), Status> {
+        let player = self.get_player(username)?;
+        let pending_event = match player {
+            PlayerId::Player0 => self.p0_pending_event.lock(),
+            PlayerId::Player1 => self.p1_pending_event.lock(),
+        };
+        let Some(request) = pending_event.as_ref() else {
+            return Ok(()); // No pending event to send
+        };
+
+        let event_sender = match player {
+            PlayerId::Player0 => &self.p0_sender,
+            PlayerId::Player1 => &self.p1_sender,
+        };
+        let _ = event_sender.send(GameEvent {
+            event_type: Some(game_event::EventType::RequestUserEvent(*request)),
+        });
+
+        Ok(())
     }
 
     pub fn submit_user_event(

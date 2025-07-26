@@ -15,12 +15,12 @@ use crate::{
     grpc::*,
 };
 
-mod user;
 mod card;
 mod logic;
 mod player;
 mod room;
 mod state;
+mod user;
 
 #[derive(Default)]
 pub struct Game {
@@ -102,9 +102,11 @@ impl game_service_server::GameService for Game {
             RoomState::Playing(..) => return Err(Status::failed_precondition("Room is full")),
             RoomState::Finished => return Err(Status::failed_precondition("Room has finished")),
         };
-        *state = RoomState::Playing(GameState::new(p0_username, username.clone()));
-        tracing::info!("Player {} joined room: {}", username, room_name);
-        drop(state); // Release the lock before sending
+
+        {
+            *state = RoomState::Playing(GameState::new(p0_username, username.clone()));
+            tracing::info!("Player {} joined room: {}", username, room_name);
+        }
 
         let _handle = room.clone().main_loop(); // TODO: avoid memory leak
 
@@ -131,6 +133,7 @@ impl game_service_server::GameService for Game {
             .map(|result| result.map_err(|e| Status::internal(format!("Broadcast error: {e}"))));
         let events = Box::pin(events);
 
+        room.send_pending_event(&username)?;
         room.sync_game_state()?;
 
         Ok(Response::new(events))

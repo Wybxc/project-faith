@@ -21,7 +21,7 @@ impl Room {
 
                 self.perform(Action::DrawCard(PlayerId::Player1, 1))?;
                 self.request_user_event(PlayerId::Player1, RequestPlayCard {}).await?;
-                
+
                 self.perform(Action::BumpRound)?;
             }
         })

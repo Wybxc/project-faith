@@ -122,7 +122,7 @@ const EventInput: Component<{
   const [intervalId, setIntervalId] = createSignal<number | null>(null);
 
   onMount(() => {
-    setTime(20);
+    setTime(props.userEvent.timeout);
     if (intervalId() !== null) {
       clearInterval(intervalId()!);
     }
