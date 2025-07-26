@@ -17,8 +17,15 @@ pub struct Room {
     p0_sender: broadcast::Sender<GameEvent>,
     p1_sender: broadcast::Sender<GameEvent>,
 
+    /// Waiting user events
+    ///
+    /// Actually no more than 2 user events are expected at the same time
+    /// (one for each player). Maybe we can use a more efficient data structure?
     user_events: Slab<oneshot::Sender<user_event::EventType>>,
+
+    /// Pending events will be re-sent to the player if they re-join the room
     p0_pending_event: Mutex<Option<RequestUserEvent>>,
+    /// Pending events will be re-sent to the player if they re-join the room
     p1_pending_event: Mutex<Option<RequestUserEvent>>,
 
     pub state: Mutex<RoomState>,
