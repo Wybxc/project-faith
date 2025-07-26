@@ -113,6 +113,14 @@ impl Room {
 }
 
 impl Room {
+    pub fn read_state<T>(&self, reader: impl FnOnce(&GameState) -> T) -> anyhow::Result<T> {
+        let state = self.state.lock();
+        match &*state {
+            RoomState::Playing(game) => Ok(reader(game)),
+            _ => Err(anyhow::anyhow!("Game not in progress")),
+        }
+    }
+
     pub fn sync_game_state(&self) {
         // Send the current game state to the player
         let state = self.state.lock();
@@ -129,17 +137,17 @@ impl Room {
         });
     }
 
-    pub fn perform(&self, action: Action) -> anyhow::Result<()> {
-        {
+    pub fn perform<A: Action>(&self, action: A) -> anyhow::Result<A::Output> {
+        let output = {
             let mut state = self.state.lock();
             let RoomState::Playing(game) = &mut *state else {
                 return Err(anyhow::anyhow!("Game not in progress"));
             };
-            game.perform(action);
-        }
+            game.perform(action)
+        };
 
         self.sync_game_state();
-        Ok(())
+        Ok(output)
     }
 
     pub async fn request_user_event<E: UserEvent>(

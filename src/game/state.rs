@@ -1,8 +1,14 @@
 use crate::{
-    game::{card::CardId, player::PlayerState},
+    game::{
+        card::{Card, CardId, REGISTRY},
+        player::PlayerState,
+    },
     grpc,
 };
 
+/// 游戏状态
+///
+/// 可变性限制：public API 只允许通过 `Action` trait 来修改状态，确保状态变更的可控性。
 pub struct GameState {
     players: (PlayerState, PlayerState),
 
@@ -20,7 +26,7 @@ impl GameState {
         }
     }
 
-    fn me(&self, player: PlayerId) -> &PlayerState {
+    pub fn me(&self, player: PlayerId) -> &PlayerState {
         match player {
             PlayerId::Player0 => &self.players.0,
             PlayerId::Player1 => &self.players.1,
@@ -62,50 +68,10 @@ impl GameState {
         }
     }
 
-    /// Applies an action to the game state.
-    pub fn perform(&mut self, action: Action) {
-        match action {
-            Action::Initalize => {
-                self.players.0.initialize(vec![CardId(7001); 30]);
-                self.players.1.initialize(vec![CardId(7002); 30]);
-                self.round = 1;
-            }
-            Action::DrawCard(player, number) => {
-                let player_state = self.me_mut(player);
-                for _ in 0..number {
-                    if let Some(card) = player_state.deck.pop() {
-                        player_state.hand.push(card);
-                    }
-                }
-            }
-            Action::PlayCard(player, card_index) => {
-                let player_state = self.me_mut(player);
-                if let Some(_card) = player_state.hand.get(card_index) {
-                    player_state.hand.remove(card_index);
-                }
-            }
-            Action::BumpRound => {
-                self.round += 1;
-            }
-        }
+    /// Performs an action on the game state.
+    pub fn perform<A: Action>(&mut self, action: A) -> A::Output {
+        action.perform(self)
     }
-}
-
-#[derive(Debug)]
-pub enum Action {
-    /// Initialize the game state.
-    Initalize,
-
-    /// Draw cards from the deck.
-    DrawCard(PlayerId, usize),
-
-    /// Start playing a card.
-    /// Move the card from the hand to the processing state.
-    /// This is the first step of playing a card.
-    PlayCard(PlayerId, usize),
-
-    /// Bump the round.
-    BumpRound,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,5 +87,100 @@ impl PlayerId {
             PlayerId::Player0 => PlayerId::Player1,
             PlayerId::Player1 => PlayerId::Player0,
         }
+    }
+}
+
+pub trait Action {
+    type Output;
+
+    fn perform(&self, game_state: &mut GameState) -> Self::Output;
+}
+
+/// 初始化游戏状态
+pub struct Initalize;
+
+impl Action for Initalize {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        game_state.players.0.initialize(vec![CardId(7001); 30]);
+        game_state.players.1.initialize(vec![CardId(7002); 30]);
+        game_state.round = 0;
+    }
+}
+
+/// 玩家抽牌
+pub struct DrawCards {
+    pub player: PlayerId,
+    pub count: usize,
+}
+
+impl Action for DrawCards {
+    type Output = Vec<CardId>;
+
+    fn perform(&self, game_state: &mut GameState) -> Self::Output {
+        let player_state = game_state.me_mut(self.player);
+        let mut drawn_cards = Vec::new();
+        for _ in 0..self.count {
+            if let Some(card) = player_state.deck.pop() {
+                drawn_cards.push(card);
+                player_state.hand.push(card);
+            }
+        }
+        drawn_cards
+    }
+}
+
+/// 玩家出牌（开始）
+pub struct PlayCard {
+    pub player: PlayerId,
+    pub card_index: usize,
+}
+
+impl Action for PlayCard {
+    type Output = Option<CardId>;
+
+    fn perform(&self, game_state: &mut GameState) -> Self::Output {
+        let player_state = game_state.me_mut(self.player);
+        if let Some(card) = player_state.hand.get(self.card_index).cloned() {
+            player_state.hand.remove(self.card_index);
+            Some(card)
+        } else {
+            None
+        }
+    }
+}
+
+/// 执行卡牌效果
+pub struct ExecuteCard {
+    pub player: PlayerId,
+    pub card_id: CardId,
+}
+
+impl Action for ExecuteCard {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        let Some(card) = REGISTRY.cards.get(&self.card_id) else {
+            return; // 卡牌不存在
+        };
+        match card {
+            Card::Order(order_card) => {
+                for skill in &order_card.skills {
+                    skill(game_state, self.player);
+                }
+            }
+        }
+    }
+}
+
+/// 回合结束，增加回合数
+pub struct BumpRound;
+
+impl Action for BumpRound {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        game_state.round += 1;
     }
 }
