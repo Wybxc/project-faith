@@ -78,6 +78,12 @@ impl GameState {
                     }
                 }
             }
+            Action::PlayCard(player, card_index) => {
+                let player_state = self.me_mut(player);
+                if let Some(_card) = player_state.hand.get(card_index) {
+                    player_state.hand.remove(card_index);
+                }
+            }
             Action::BumpRound => {
                 self.round += 1;
             }
@@ -92,6 +98,11 @@ pub enum Action {
 
     /// Draw cards from the deck.
     DrawCard(PlayerId, usize),
+
+    /// Start playing a card.
+    /// Move the card from the hand to the processing state.
+    /// This is the first step of playing a card.
+    PlayCard(PlayerId, usize),
 
     /// Bump the round.
     BumpRound,

@@ -1,14 +1,12 @@
 #![allow(unreachable_patterns)]
 
-use tonic::Status;
-
 use crate::grpc::*;
 
 pub trait UserEvent {
     type Response;
 
     fn into_rpc(self) -> request_user_event::EventType;
-    fn from_rpc(response: user_event::EventType) -> Result<Self::Response, Status>;
+    fn from_rpc(response: user_event::EventType) -> anyhow::Result<Self::Response>;
 }
 
 macro_rules! impl_user_event {
@@ -20,10 +18,10 @@ macro_rules! impl_user_event {
                 request_user_event::EventType::$name(self)
             }
 
-            fn from_rpc(response: user_event::EventType) -> Result<Self::Response, Status> {
+            fn from_rpc(response: user_event::EventType) -> anyhow::Result<Self::Response> {
                 match response {
                     user_event::EventType::$name(ev) => Ok(ev),
-                    _ => Err(Status::invalid_argument(concat!(
+                    _ => Err(anyhow::anyhow!(concat!(
                         "Invalid event type for ",
                         stringify!($event)
                     ))),

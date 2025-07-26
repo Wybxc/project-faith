@@ -28,6 +28,7 @@ pub struct Game {
     room_map: Arc<Mutex<HashMap<String, usize>>>,
 }
 
+#[allow(clippy::result_large_err)]
 impl Game {
     fn auth(&self, metadata: &MetadataMap) -> Result<String, Status> {
         let authentication = metadata
@@ -134,7 +135,7 @@ impl game_service_server::GameService for Game {
         let events = Box::pin(events);
 
         room.send_pending_event(&username)?;
-        room.sync_game_state()?;
+        room.sync_game_state();
 
         Ok(Response::new(events))
     }

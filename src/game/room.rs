@@ -13,6 +13,12 @@ use crate::{
     grpc::*,
 };
 
+pub enum RoomState {
+    Waiting { p0_username: String },
+    Playing(GameState),
+    Finished,
+}
+
 pub struct Room {
     p0_sender: broadcast::Sender<GameEvent>,
     p1_sender: broadcast::Sender<GameEvent>,
@@ -52,7 +58,10 @@ impl Room {
             _ => false,
         }
     }
+}
 
+#[allow(clippy::result_large_err)]
+impl Room {
     pub fn get_player(&self, username: &str) -> Result<PlayerId, Status> {
         match &*self.state.lock() {
             RoomState::Waiting { p0_username } if p0_username == username => Ok(PlayerId::Player0),
@@ -69,11 +78,46 @@ impl Room {
         }
     }
 
-    pub fn sync_game_state(&self) -> Result<(), Status> {
+    pub fn send_pending_event(&self, username: &str) -> Result<(), Status> {
+        let player = self.get_player(username)?;
+        let pending_event = match player {
+            PlayerId::Player0 => self.p0_pending_event.lock(),
+            PlayerId::Player1 => self.p1_pending_event.lock(),
+        };
+        let Some(request) = pending_event.as_ref() else {
+            return Ok(()); // No pending event to send
+        };
+
+        let event_sender = match player {
+            PlayerId::Player0 => &self.p0_sender,
+            PlayerId::Player1 => &self.p1_sender,
+        };
+        let _ = event_sender.send(GameEvent {
+            event_type: Some(game_event::EventType::RequestUserEvent(*request)),
+        });
+
+        Ok(())
+    }
+
+    pub fn submit_user_event(
+        &self,
+        seqnum: usize,
+        event_type: user_event::EventType,
+    ) -> Result<(), Status> {
+        let Some(ch) = self.user_events.take(seqnum) else {
+            return Err(Status::not_found("User event not found"));
+        };
+        let _ = ch.send(event_type);
+        Ok(())
+    }
+}
+
+impl Room {
+    pub fn sync_game_state(&self) {
         // Send the current game state to the player
         let state = self.state.lock();
         let RoomState::Playing(game) = &*state else {
-            return Ok(()); // No game to sync
+            return; // No game to sync
         };
         let p0_game_state = game.to_client(PlayerId::Player0);
         let p1_game_state = game.to_client(PlayerId::Player1);
@@ -83,19 +127,18 @@ impl Room {
         let _ = self.p1_sender.send(GameEvent {
             event_type: Some(game_event::EventType::StateUpdate(p1_game_state)),
         });
-        Ok(())
     }
 
-    pub fn perform(&self, action: Action) -> Result<(), Status> {
+    pub fn perform(&self, action: Action) -> anyhow::Result<()> {
         {
             let mut state = self.state.lock();
             let RoomState::Playing(game) = &mut *state else {
-                return Err(Status::failed_precondition("Game not in progress"));
+                return Err(anyhow::anyhow!("Game not in progress"));
             };
             game.perform(action);
         }
 
-        self.sync_game_state()?;
+        self.sync_game_state();
         Ok(())
     }
 
@@ -103,7 +146,7 @@ impl Room {
         self: &Arc<Self>,
         player: PlayerId,
         request: E,
-    ) -> Result<Option<E::Response>, Status> {
+    ) -> anyhow::Result<Option<E::Response>> {
         let event_sender = match player {
             PlayerId::Player0 => &self.p0_sender,
             PlayerId::Player1 => &self.p1_sender,
@@ -176,43 +219,4 @@ impl Room {
 
         response
     }
-
-    pub fn send_pending_event(&self, username: &str) -> Result<(), Status> {
-        let player = self.get_player(username)?;
-        let pending_event = match player {
-            PlayerId::Player0 => self.p0_pending_event.lock(),
-            PlayerId::Player1 => self.p1_pending_event.lock(),
-        };
-        let Some(request) = pending_event.as_ref() else {
-            return Ok(()); // No pending event to send
-        };
-
-        let event_sender = match player {
-            PlayerId::Player0 => &self.p0_sender,
-            PlayerId::Player1 => &self.p1_sender,
-        };
-        let _ = event_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::RequestUserEvent(*request)),
-        });
-
-        Ok(())
-    }
-
-    pub fn submit_user_event(
-        &self,
-        seqnum: usize,
-        event_type: user_event::EventType,
-    ) -> Result<(), Status> {
-        let Some(ch) = self.user_events.take(seqnum) else {
-            return Err(Status::not_found("User event not found"));
-        };
-        let _ = ch.send(event_type);
-        Ok(())
-    }
-}
-
-pub enum RoomState {
-    Waiting { p0_username: String },
-    Playing(GameState),
-    Finished,
 }
