@@ -18,6 +18,7 @@ import {
   RequestUserEvent,
   UserEvent,
 } from './generated/proto/game.v1';
+import { interval } from 'rxjs';
 
 const Game: Component<{
   api: GameV1Api;
@@ -98,47 +99,39 @@ const GameBoard: Component<{
 
       <Show when={props.userEvent} keyed>
         {(userEvent) => (
-          <EventInput
-            userEvent={userEvent}
-            onSubmit={(event) => {
-              if (event === 'timeout') {
-                props.onFinishEvent();
-              } else {
-                props.onFinishEvent(event);
-              }
-            }}
-          />
+          <EventInput userEvent={userEvent} onSubmit={props.onFinishEvent} />
         )}
       </Show>
     </>
   );
 };
 
+let timer: number | null = null;
+function createSingletonTimer(callback: () => void) {
+  if (timer !== null) {
+    clearInterval(timer);
+  }
+  timer = setInterval(callback, 1000);
+}
+
 const EventInput: Component<{
   userEvent: RequestUserEvent;
-  onSubmit: (event: UserEvent['eventType'] | 'timeout') => void;
+  onSubmit: (event?: UserEvent['eventType']) => void;
 }> = (props) => {
-  const [time, setTime] = createSignal(0);
-  const [intervalId, setIntervalId] = createSignal<number | null>(null);
+  const [time, setTime] = createSignal<number | null>(null);
 
-  onMount(() => {
-    setTime(props.userEvent.timeout);
-    if (intervalId() !== null) {
-      clearInterval(intervalId()!);
-    }
-    const interval = setInterval(() => {
-      setTime((prev) => {
-        prev -= 1;
-        if (prev <= 0) {
-          clearInterval(interval);
-          setIntervalId(null);
-          props.onSubmit('timeout');
-        }
-        return prev;
-      });
-    }, 1000);
-    setIntervalId(interval);
+  createSingletonTimer(() => {
+    setTime((prev) => {
+      if (prev === null) return null; // If not enabled, do nothing
+      prev -= 1;
+      if (prev <= 0) {
+        props.onSubmit();
+      }
+      return prev;
+    });
   });
+  onMount(() => setTime(props.userEvent.timeout));
+  onCleanup(() => setTime(null));
 
   return (
     <div>
