@@ -14,9 +14,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
 import {
-  EndTurn,
   GameState,
-  PlayCard,
   RequestUserEvent,
   UserEvent,
 } from './generated/proto/game.v1';
