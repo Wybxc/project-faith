@@ -37,7 +37,7 @@ export interface GameEvent {
 
 export interface GameState {
   readonly debugLog: readonly string[];
-  readonly selfHand: readonly number[];
+  readonly selfHand: readonly HandCard[];
   readonly otherHandCount: number;
   readonly selfDeckCount: number;
   readonly otherDeckCount: number;
@@ -67,10 +67,16 @@ export interface UserEventResponse {
 }
 
 export interface RequestTurnAction {
+  readonly playableCards: readonly number[];
+}
+
+export interface HandCard {
+  readonly cardId: number;
+  readonly entity: number;
 }
 
 export interface PlayCard {
-  readonly cardIdx: number;
+  readonly entity: number;
 }
 
 export interface EndTurn {
@@ -337,11 +343,9 @@ export const GameState: MessageFns<GameState> = {
     for (const v of message.debugLog) {
       writer.uint32(10).string(v!);
     }
-    writer.uint32(18).fork();
     for (const v of message.selfHand) {
-      writer.uint32(v);
+      HandCard.encode(v!, writer.uint32(18).fork()).join();
     }
-    writer.join();
     if (message.otherHandCount !== 0) {
       writer.uint32(24).uint32(message.otherHandCount);
     }
@@ -389,22 +393,12 @@ export const GameState: MessageFns<GameState> = {
           continue;
         }
         case 2: {
-          if (tag === 16) {
-            message.selfHand.push(reader.uint32());
-
-            continue;
+          if (tag !== 18) {
+            break;
           }
 
-          if (tag === 18) {
-            const end2 = reader.uint32() + reader.pos;
-            while (reader.pos < end2) {
-              message.selfHand.push(reader.uint32());
-            }
-
-            continue;
-          }
-
-          break;
+          message.selfHand.push(HandCard.decode(reader, reader.uint32()));
+          continue;
         }
         case 3: {
           if (tag !== 24) {
@@ -505,7 +499,7 @@ export const GameState: MessageFns<GameState> = {
   fromPartial<I extends Exact<DeepPartial<GameState>, I>>(object: I): GameState {
     const message = createBaseGameState() as any;
     message.debugLog = object.debugLog?.map((e) => e) || [];
-    message.selfHand = object.selfHand?.map((e) => e) || [];
+    message.selfHand = object.selfHand?.map((e) => HandCard.fromPartial(e)) || [];
     message.otherHandCount = object.otherHandCount ?? 0;
     message.selfDeckCount = object.selfDeckCount ?? 0;
     message.otherDeckCount = object.otherDeckCount ?? 0;
@@ -734,11 +728,16 @@ export const UserEventResponse: MessageFns<UserEventResponse> = {
 };
 
 function createBaseRequestTurnAction(): RequestTurnAction {
-  return {};
+  return { playableCards: [] };
 }
 
 export const RequestTurnAction: MessageFns<RequestTurnAction> = {
-  encode(_: RequestTurnAction, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+  encode(message: RequestTurnAction, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    writer.uint32(10).fork();
+    for (const v of message.playableCards) {
+      writer.uint32(v);
+    }
+    writer.join();
     return writer;
   },
 
@@ -749,6 +748,24 @@ export const RequestTurnAction: MessageFns<RequestTurnAction> = {
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
+        case 1: {
+          if (tag === 8) {
+            message.playableCards.push(reader.uint32());
+
+            continue;
+          }
+
+          if (tag === 10) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.playableCards.push(reader.uint32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -761,20 +778,79 @@ export const RequestTurnAction: MessageFns<RequestTurnAction> = {
   create<I extends Exact<DeepPartial<RequestTurnAction>, I>>(base?: I): RequestTurnAction {
     return RequestTurnAction.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<RequestTurnAction>, I>>(_: I): RequestTurnAction {
+  fromPartial<I extends Exact<DeepPartial<RequestTurnAction>, I>>(object: I): RequestTurnAction {
     const message = createBaseRequestTurnAction() as any;
+    message.playableCards = object.playableCards?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseHandCard(): HandCard {
+  return { cardId: 0, entity: 0 };
+}
+
+export const HandCard: MessageFns<HandCard> = {
+  encode(message: HandCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cardId !== 0) {
+      writer.uint32(8).uint32(message.cardId);
+    }
+    if (message.entity !== 0) {
+      writer.uint32(16).uint32(message.entity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HandCard {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseHandCard() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.cardId = reader.uint32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.entity = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<HandCard>, I>>(base?: I): HandCard {
+    return HandCard.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HandCard>, I>>(object: I): HandCard {
+    const message = createBaseHandCard() as any;
+    message.cardId = object.cardId ?? 0;
+    message.entity = object.entity ?? 0;
     return message;
   },
 };
 
 function createBasePlayCard(): PlayCard {
-  return { cardIdx: 0 };
+  return { entity: 0 };
 }
 
 export const PlayCard: MessageFns<PlayCard> = {
   encode(message: PlayCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.cardIdx !== 0) {
-      writer.uint32(8).uint32(message.cardIdx);
+    if (message.entity !== 0) {
+      writer.uint32(8).uint32(message.entity);
     }
     return writer;
   },
@@ -791,7 +867,7 @@ export const PlayCard: MessageFns<PlayCard> = {
             break;
           }
 
-          message.cardIdx = reader.uint32();
+          message.entity = reader.uint32();
           continue;
         }
       }
@@ -808,7 +884,7 @@ export const PlayCard: MessageFns<PlayCard> = {
   },
   fromPartial<I extends Exact<DeepPartial<PlayCard>, I>>(object: I): PlayCard {
     const message = createBasePlayCard() as any;
-    message.cardIdx = object.cardIdx ?? 0;
+    message.entity = object.entity ?? 0;
     return message;
   },
 };

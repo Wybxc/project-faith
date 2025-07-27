@@ -7,6 +7,18 @@ use crate::utils::Map;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Entity(u32);
 
+impl Entity {
+    pub fn id(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<u32> for Entity {
+    fn from(id: u32) -> Self {
+        Self(id)
+    }
+}
+
 pub trait Component: Send + Sync + 'static {
     type Storage: Storage<Component = Self> + 'static;
 }

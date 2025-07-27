@@ -2,7 +2,7 @@ use std::{time::Duration, vec};
 
 use crate::{
     game::card::{CardDef, CardId, REGISTRY},
-    grpc,
+    grpc::{self},
     system::{Entity, System},
     utils::Timer,
 };
@@ -84,7 +84,10 @@ impl GameState {
             .me(player)
             .hand
             .iter()
-            .map(|&e| self.system.get::<CardId>(e).unwrap().0)
+            .map(|&e| grpc::HandCard {
+                card_id: self.system.get::<CardId>(e).unwrap().0,
+                entity: e.id(),
+            })
             .collect();
         let other_hand_count = self.me(player.opp()).hand.len() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
@@ -230,27 +233,19 @@ impl Action for DrawCards {
 /// 玩家出牌（开始）
 pub struct PlayCard {
     pub player: PlayerId,
-    pub card_index: usize,
+    pub card: Entity,
 }
 
 impl Action for PlayCard {
-    type Output = Option<Entity>;
+    type Output = ();
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output {
         let player_state = game_state.me_mut(self.player);
-        if let Some(card) = player_state.hand.get(self.card_index).cloned() {
-            player_state.hand.remove(self.card_index);
-            Some(card)
-        } else {
-            None
-        }
+        player_state.hand.retain(|&e| e != self.card);
     }
 
     fn debug_log(&self) -> String {
-        format!(
-            "玩家 {} 使用了第 {} 张手牌。",
-            self.player as u8, self.card_index
-        )
+        format!("玩家 {} 使用了手牌 {}。", self.player as u8, self.card.id())
     }
 }
 

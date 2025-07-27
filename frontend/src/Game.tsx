@@ -145,9 +145,9 @@ const GameBoard: Component<{
             <Td>你的手牌</Td>
             <Td>
               <For each={props.state.selfHand}>
-                {(card, i) => (
+                {(card) => (
                   <div>
-                    {i()}: <Card cardId={card.toString()} />
+                    {card.entity}: <Card cardId={card.cardId.toString()} />
                   </div>
                 )}
               </For>
@@ -238,7 +238,7 @@ const EventInput: Component<{
       <Switch>
         <Match when={props.userEvent.eventType?.$case === 'turnAction'}>
           <TurnActionComponent
-            handCount={props.state.selfHand.length}
+            playableCards={props.userEvent.eventType!.value.playableCards}
             onSubmit={props.onSubmit}
           />
         </Match>
@@ -248,25 +248,29 @@ const EventInput: Component<{
 };
 
 const TurnActionComponent: Component<{
-  handCount: number;
+  playableCards: readonly number[];
   onSubmit: (event: UserEvent['eventType']) => void;
 }> = (props) => {
-  const [cardId, setCardId] = createSignal('');
+  const [card, setCard] = createSignal<number | null>(null);
 
   return (
     <div>
-      <p>请选择要打出的卡牌索引（0 - {props.handCount - 1}）:</p>
-      <input
-        type="text"
-        value={cardId()}
-        onInput={(e) => setCardId(e.currentTarget.value)}
-        class={css({
-          padding: '0.5rem',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          marginBottom: '1rem',
-        })}
-      />
+      <p>请选择要打出的卡牌:</p>
+      <For each={props.playableCards}>
+        {(entity) => (
+          <label class={css({ display: 'block', margin: '0.5rem 0' })}>
+            <input
+              type="radio"
+              name="playable-card"
+              value={entity}
+              checked={card() === entity}
+              onChange={(e) => setCard(parseInt(e.currentTarget.value, 10))}
+              class={css({ marginRight: '0.5rem' })}
+            />
+            <span>{entity}</span>
+          </label>
+        )}
+      </For>
       <button
         class={css({
           padding: '0.5rem 1rem',
@@ -277,14 +281,12 @@ const TurnActionComponent: Component<{
           cursor: 'pointer',
         })}
         onClick={() => {
-          const cardIdx = parseInt(cardId(), 10);
-          if (cardIdx >= 0 && cardIdx < props.handCount) {
+          const entity = card();
+          if (entity !== null) {
             props.onSubmit({
               $case: 'playCard',
-              value: { cardIdx },
+              value: { entity },
             });
-          } else {
-            alert('无效的卡牌索引');
           }
         }}
       >

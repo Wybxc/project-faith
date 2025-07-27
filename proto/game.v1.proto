@@ -31,7 +31,7 @@ message GameEvent {
 
 message GameState {
   repeated string debug_log = 1;
-  repeated uint32 self_hand = 2;
+  repeated HandCard self_hand = 2;
   uint32 other_hand_count = 3;
   uint32 self_deck_count = 4;
   uint32 other_deck_count = 5;
@@ -61,10 +61,17 @@ message UserEvent {
 
 message UserEventResponse {}
 
-message RequestTurnAction {}
+message RequestTurnAction {
+  repeated uint32 playable_cards = 1;
+}
+
+message HandCard {
+  uint32 card_id = 1;
+  uint32 entity = 2;
+}
 
 message PlayCard {
-  uint32 card_idx = 1;
+  uint32 entity = 1;
 }
 
 message EndTurn {}

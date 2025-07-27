@@ -118,7 +118,7 @@ impl Room {
             PlayerId::Player1 => &self.p1_sender,
         };
         let _ = event_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::RequestUserEvent(*request)),
+            event_type: Some(game_event::EventType::RequestUserEvent(request.clone())),
         });
 
         Ok(())
@@ -188,7 +188,7 @@ impl Room {
             event_type: Some(request.into_rpc()),
         };
         let _ = event_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::RequestUserEvent(request)),
+            event_type: Some(game_event::EventType::RequestUserEvent(request.clone())),
         });
 
         {
