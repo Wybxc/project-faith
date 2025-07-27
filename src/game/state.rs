@@ -1,9 +1,12 @@
+use std::time::Duration;
+
 use crate::{
     game::{
         card::{Card, CardId, REGISTRY},
         player::PlayerState,
     },
     grpc,
+    utils::Timer,
 };
 
 /// 游戏状态
@@ -21,6 +24,9 @@ pub struct GameState {
 
     /// Current player's turn.
     current_turn: PlayerId,
+
+    /// Timer for the current turn.
+    turn_timer: Timer,
 
     /// Debug log for tracing actions.
     debug_log: Vec<String>,
@@ -58,6 +64,10 @@ impl GameState {
             PlayerId::Player0 => &mut self.players.0,
             PlayerId::Player1 => &mut self.players.1,
         }
+    }
+
+    pub fn turn_time_remaining(&self) -> Duration {
+        self.turn_timer.remaining()
     }
 
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
@@ -147,6 +157,8 @@ impl Action for TurnStart {
 
     fn perform(&self, game_state: &mut GameState) {
         game_state.current_turn = self.player;
+        game_state.turn_timer.reset(Duration::from_secs(30));
+        game_state.turn_timer.start();
     }
 
     fn debug_log(&self) -> String {

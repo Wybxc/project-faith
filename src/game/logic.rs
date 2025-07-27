@@ -38,8 +38,7 @@ impl Room {
         self.perform(TurnStart { player });
         self.perform(DrawCards { player, count: 1 });
 
-        if self.read_state(|gs| gs.me(player).hand.len()) > 0 {
-            // 如果玩家有手牌，则请求出牌
+        while !self.read_state(|gs| gs.turn_time_remaining().is_zero()) {
             let card_index = self
                 .request_user_event(player, RequestPlayCard {})
                 .await?

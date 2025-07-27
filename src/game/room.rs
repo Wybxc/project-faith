@@ -1,4 +1,7 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use atomig::{Atom, Atomic};
 use parking_lot::Mutex;
@@ -179,11 +182,9 @@ impl Room {
             .insert(sender)
             .expect("Failed to insert user event sender");
 
-        let timeout = 20;
-
         let request = RequestUserEvent {
             seqnum: seqnum as u64,
-            timeout,
+            timeout: self.read_state(|gs| gs.turn_time_remaining().as_millis() as i32),
             event_type: Some(request.into_rpc()),
         };
         let _ = event_sender.send(GameEvent {
@@ -201,15 +202,14 @@ impl Room {
         let this = Arc::clone(self);
         let countdown = tokio::spawn(async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_micros(100)).await;
                 let mut pending_event = match player {
                     PlayerId::Player0 => this.p0_pending_event.lock(),
                     PlayerId::Player1 => this.p1_pending_event.lock(),
                 };
                 if let Some(req) = pending_event.as_mut() {
-                    req.timeout -= 1;
-                    // Client timeout is 1 second shorter than server timeout
-                    if req.timeout <= -1 {
+                    req.timeout = this.read_state(|gs| gs.turn_time_remaining().as_millis() as i32);
+                    if req.timeout <= 0 {
                         break; // Timeout reached, exit countdown
                     }
                 } else {

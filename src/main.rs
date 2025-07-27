@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use http::HeaderName;
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
@@ -7,6 +9,7 @@ use crate::grpc::*;
 
 mod auth;
 mod game;
+mod utils;
 
 mod grpc {
     tonic::include_proto!("auth.v1");

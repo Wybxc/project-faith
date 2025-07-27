@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{collections::HashMap, sync::LazyLock};
 
 use crate::game::state::{DrawCards, GameState, PlayerId};

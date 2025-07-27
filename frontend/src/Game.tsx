@@ -225,7 +225,7 @@ const EventInput: Component<{
       return prev;
     });
   });
-  onMount(() => setTime(props.userEvent.timeout));
+  onMount(() => setTime(props.userEvent.timeout / 1000));
   onCleanup(() => setTime(null));
 
   return (
