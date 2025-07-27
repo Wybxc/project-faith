@@ -9,6 +9,7 @@ use crate::{
 /// 游戏状态
 ///
 /// 可变性限制：public API 只允许通过 `Action` trait 来修改状态，确保状态变更的可控性。
+#[derive(Default)]
 pub struct GameState {
     players: (PlayerState, PlayerState),
 
@@ -18,20 +19,25 @@ pub struct GameState {
     /// Indicates if the game is finished.
     finished: bool,
 
+    /// Current player's turn.
+    current_turn: PlayerId,
+
     /// Debug log for tracing actions.
     debug_log: Vec<String>,
 }
 
 impl GameState {
     pub fn new() -> Self {
-        let p0 = PlayerState::new();
-        let p1 = PlayerState::new();
-        Self {
-            players: (p0, p1),
-            round: 0,
-            finished: false,
-            debug_log: Vec::new(),
-        }
+        Default::default()
+    }
+
+    fn initialize(&mut self, player0_deck: Vec<CardId>, player1_deck: Vec<CardId>) {
+        self.players.0.initialize(player0_deck);
+        self.players.1.initialize(player1_deck);
+        self.round = 0;
+        self.finished = false;
+        self.current_turn = PlayerId::Player0;
+        self.debug_log.clear();
     }
 
     pub fn me(&self, player: PlayerId) -> &PlayerState {
@@ -54,6 +60,7 @@ impl GameState {
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
         let round_number = self.round;
+        let is_my_turn = self.current_turn == player;
         let game_finished = self.finished;
         let debug_log = self.debug_log.clone();
         grpc::GameState {
@@ -62,6 +69,7 @@ impl GameState {
             self_deck_count,
             other_deck_count,
             round_number,
+            is_my_turn,
             game_finished,
             debug_log,
         }
@@ -69,13 +77,14 @@ impl GameState {
 
     /// Performs an action on the game state.
     pub fn perform<A: Action>(&mut self, action: A) -> A::Output {
-        self.debug_log.push(format!("{action:?}"));
+        self.debug_log.push(action.debug_log());
         action.perform(self)
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerId {
+    #[default]
     Player0 = 0,
     Player1 = 1,
 }
@@ -90,28 +99,49 @@ impl PlayerId {
     }
 }
 
-pub trait Action: std::fmt::Debug {
+pub trait Action {
     type Output;
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output;
+    fn debug_log(&self) -> String;
 }
 
 /// 初始化游戏状态
-#[derive(Debug)]
 pub struct Initalize;
 
 impl Action for Initalize {
     type Output = ();
 
     fn perform(&self, game_state: &mut GameState) {
-        game_state.players.0.initialize(vec![CardId(7001); 3]);
-        game_state.players.1.initialize(vec![CardId(7002); 3]);
-        game_state.round = 0;
+        game_state.initialize(
+            vec![CardId(7001); 3], // Player 0's deck
+            vec![CardId(7002); 3], // Player 1's deck
+        );
+    }
+
+    fn debug_log(&self) -> String {
+        "游戏开始。".to_string()
+    }
+}
+
+/// 回合开始
+pub struct TurnStart {
+    pub player: PlayerId,
+}
+
+impl Action for TurnStart {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        game_state.current_turn = self.player;
+    }
+
+    fn debug_log(&self) -> String {
+        format!("回合开始，当前玩家：{}", self.player as u8)
     }
 }
 
 /// 玩家抽牌
-#[derive(Debug)]
 pub struct DrawCards {
     pub player: PlayerId,
     pub count: usize,
@@ -131,10 +161,13 @@ impl Action for DrawCards {
         }
         drawn_cards
     }
+
+    fn debug_log(&self) -> String {
+        format!("玩家 {} 抽了 {} 张牌。", self.player as u8, self.count)
+    }
 }
 
 /// 玩家出牌（开始）
-#[derive(Debug)]
 pub struct PlayCard {
     pub player: PlayerId,
     pub card_index: usize,
@@ -152,10 +185,16 @@ impl Action for PlayCard {
             None
         }
     }
+
+    fn debug_log(&self) -> String {
+        format!(
+            "玩家 {} 使用了第 {} 张手牌。",
+            self.player as u8, self.card_index
+        )
+    }
 }
 
 /// 执行卡牌效果
-#[derive(Debug)]
 pub struct ExecuteCard {
     pub player: PlayerId,
     pub card_id: CardId,
@@ -176,10 +215,16 @@ impl Action for ExecuteCard {
             }
         }
     }
+
+    fn debug_log(&self) -> String {
+        format!(
+            "玩家 {} 执行了卡牌编号 {} 的效果。",
+            self.player as u8, self.card_id.0
+        )
+    }
 }
 
 /// 回合结束，增加回合数
-#[derive(Debug)]
 pub struct BumpRound;
 
 impl Action for BumpRound {
@@ -188,10 +233,13 @@ impl Action for BumpRound {
     fn perform(&self, game_state: &mut GameState) {
         game_state.round += 1;
     }
+
+    fn debug_log(&self) -> String {
+        "回合数增加。".to_string()
+    }
 }
 
 /// 游戏结束
-#[derive(Debug)]
 pub struct GameFinished;
 
 impl Action for GameFinished {
@@ -199,5 +247,9 @@ impl Action for GameFinished {
 
     fn perform(&self, game_state: &mut GameState) {
         game_state.finished = true;
+    }
+
+    fn debug_log(&self) -> String {
+        "游戏结束。".to_string()
     }
 }

@@ -31,6 +31,7 @@ const Game: Component<{
     selfDeckCount: 0,
     otherDeckCount: 0,
     roundNumber: 0,
+    isMyTurn: false,
     gameFinished: false,
     debugLog: [],
   });
@@ -92,6 +93,7 @@ const GameBoard: Component<{
   return (
     <>
       <p>当前回合: {props.state.roundNumber}</p>
+      <p>当前玩家: {props.state.isMyTurn ? '你' : '对方'}</p>
       <p>对方牌库剩余: {props.state.otherDeckCount}</p>
       <p>你的牌库剩余: {props.state.selfDeckCount}</p>
       <p>对方手牌数: {props.state.otherHandCount}</p>

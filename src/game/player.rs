@@ -1,5 +1,6 @@
 use crate::game::card::CardId;
 
+#[derive(Default)]
 pub struct PlayerState {
     /// The player's hand of cards, from left to right.
     pub hand: Vec<CardId>,
@@ -8,13 +9,6 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
-    pub fn new() -> Self {
-        Self {
-            hand: Vec::new(),
-            deck: Vec::new(),
-        }
-    }
-
     pub fn initialize(&mut self, deck: Vec<CardId>) {
         self.hand.clear();
         self.deck = deck;

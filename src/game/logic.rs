@@ -35,6 +35,7 @@ impl Room {
     }
 
     async fn turn(self: &Arc<Self>, player: PlayerId) -> Result<()> {
+        self.perform(TurnStart { player });
         self.perform(DrawCards { player, count: 1 });
 
         if self.read_state(|gs| gs.me(player).hand.len()) > 0 {
