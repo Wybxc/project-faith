@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use http::HeaderName;
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
