@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ahash = "0.8.12"
 anyhow = "1.0.98"
 atomig = { version = "0.4.3", features = ["derive"] }
 base64 = "0.22.1"
+downcast-rs = "2.0.1"
 futures = "0.3.31"
 http = "1.3.1"
 parking_lot = { version = "0.12.4", features = ["deadlock_detection"] }

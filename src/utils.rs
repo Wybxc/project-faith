@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+pub type Map<K, V> = ahash::AHashMap<K, V>;
+
 pub struct Timer {
     duration: Duration,
     start_time: Instant,

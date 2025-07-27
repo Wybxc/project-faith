@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     pin::Pin,
     sync::{Arc, atomic::Ordering},
 };
@@ -14,11 +13,11 @@ use tonic::{Request, Response, Status, async_trait, metadata::MetadataMap};
 use crate::{
     game::room::{Room, RoomState},
     grpc::*,
+    utils::Map,
 };
 
 mod card;
 mod logic;
-mod player;
 mod room;
 mod state;
 mod user;
@@ -26,7 +25,7 @@ mod user;
 #[derive(Default)]
 pub struct Game {
     rooms: Arc<Slab<Arc<Room>>>,
-    room_map: Arc<Mutex<HashMap<String, usize>>>,
+    room_map: Arc<Mutex<Map<String, usize>>>,
 }
 
 #[allow(clippy::result_large_err)]

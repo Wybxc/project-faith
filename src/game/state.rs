@@ -1,11 +1,9 @@
-use std::time::Duration;
+use std::{time::Duration, vec};
 
 use crate::{
-    game::{
-        card::{Card, CardId, REGISTRY},
-        player::PlayerState,
-    },
+    game::card::{CardDef, CardId, REGISTRY},
     grpc,
+    system::{Entity, System},
     utils::Timer,
 };
 
@@ -14,6 +12,8 @@ use crate::{
 /// 可变性限制：public API 只允许通过 `Action` trait 来修改状态，确保状态变更的可控性。
 #[derive(Default)]
 pub struct GameState {
+    system: System,
+
     players: (PlayerState, PlayerState),
 
     /// The current round number.
@@ -44,8 +44,12 @@ impl GameState {
         player0_faith: Vec<CardId>,
         player1_faith: Vec<CardId>,
     ) {
-        self.players.0.initialize(player0_deck, player0_faith);
-        self.players.1.initialize(player1_deck, player1_faith);
+        self.players
+            .0
+            .initialize(&mut self.system, player0_deck, player0_faith);
+        self.players
+            .1
+            .initialize(&mut self.system, player1_deck, player1_faith);
         self.round = 0;
         self.finished = false;
         self.current_turn = PlayerId::Player0;
@@ -66,13 +70,22 @@ impl GameState {
         }
     }
 
+    pub fn system(&self) -> &System {
+        &self.system
+    }
+
     pub fn turn_time_remaining(&self) -> Duration {
         self.turn_timer.remaining()
     }
 
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
         let debug_log = self.debug_log.clone();
-        let self_hand = self.me(player).hand.iter().map(|id| id.0).collect();
+        let self_hand = self
+            .me(player)
+            .hand
+            .iter()
+            .map(|&e| self.system.get::<CardId>(e).unwrap().0)
+            .collect();
         let other_hand_count = self.me(player.opp()).hand.len() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
@@ -117,6 +130,28 @@ impl PlayerId {
             PlayerId::Player0 => PlayerId::Player1,
             PlayerId::Player1 => PlayerId::Player0,
         }
+    }
+}
+
+#[derive(Default)]
+pub struct PlayerState {
+    /// The player's hand of cards, from left to right.
+    pub hand: Vec<Entity>,
+    /// The player's deck of cards, from bottom to top.
+    pub deck: Vec<Entity>,
+    /// Faith cards
+    pub faith: Vec<CardId>,
+}
+
+impl PlayerState {
+    pub fn initialize(&mut self, system: &mut System, deck: Vec<CardId>, faith_cards: Vec<CardId>) {
+        // 初始化时 system 为空，不需要删除旧卡牌
+        self.hand.clear();
+        for card_id in deck {
+            let entity = system.entity().component(card_id).spawn();
+            self.deck.push(entity);
+        }
+        self.faith = faith_cards;
     }
 }
 
@@ -173,7 +208,7 @@ pub struct DrawCards {
 }
 
 impl Action for DrawCards {
-    type Output = Vec<CardId>;
+    type Output = Vec<Entity>;
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output {
         let player_state = game_state.me_mut(self.player);
@@ -199,7 +234,7 @@ pub struct PlayCard {
 }
 
 impl Action for PlayCard {
-    type Output = Option<CardId>;
+    type Output = Option<Entity>;
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output {
         let player_state = game_state.me_mut(self.player);
@@ -233,12 +268,12 @@ impl Action for ExecuteCard {
             return; // 卡牌不存在
         };
         match card {
-            Card::Order(order_card) => {
+            CardDef::Order(order_card) => {
                 for skill in &order_card.skills {
                     skill(game_state, self.player);
                 }
             }
-            Card::Faith(_) => {}
+            CardDef::Faith(_) => {}
         }
     }
 

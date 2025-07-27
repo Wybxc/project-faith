@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
-    game::{room::Room, state::*, user::TurnAction},
+    game::{card::CardId, room::Room, state::*, user::TurnAction},
     grpc::RequestTurnAction,
 };
 
@@ -46,7 +46,14 @@ impl Room {
             match action {
                 TurnAction::PlayCard(play_card) => {
                     let card_index = play_card.card_idx as usize;
-                    let card_id = self.perform(PlayCard { player, card_index }).unwrap();
+                    let Some(card) = self.perform(PlayCard { player, card_index }) else {
+                        continue; // 如果出牌失败，继续等待
+                    };
+                    let Some(card_id) =
+                        self.read_state(|gs| gs.system().get::<CardId>(card).copied())
+                    else {
+                        continue; // 如果获取卡牌 ID 失败，继续等待
+                    };
                     self.perform(ExecuteCard { player, card_id });
                 }
                 TurnAction::EndTurn(_) => {
