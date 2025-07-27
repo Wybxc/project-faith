@@ -3,8 +3,8 @@ import {
   createMemo,
   createSignal,
   For,
+  JSXElement,
   Match,
-  on,
   onCleanup,
   onMount,
   Show,
@@ -87,6 +87,14 @@ const Game: Component<{
   );
 };
 
+const Td: Component<{ children?: JSXElement }> = (props) => {
+  return (
+    <td class={css({ padding: '0.5rem', border: '1px solid #ccc' })}>
+      {props.children}
+    </td>
+  );
+};
+
 const GameBoard: Component<{
   state: GameState;
   userEvent: RequestUserEvent | null;
@@ -94,41 +102,72 @@ const GameBoard: Component<{
 }> = (props) => {
   return (
     <>
-      <p>当前回合: {props.state.roundNumber}</p>
-      <p>当前玩家: {props.state.isMyTurn ? '你' : '对方'}</p>
-      <p>对方牌库剩余: {props.state.otherDeckCount}</p>
-      <p>你的牌库剩余: {props.state.selfDeckCount}</p>
-      <p>对方手牌数: {props.state.otherHandCount}</p>
-      <div>
-        对方信念牌
-        <For each={props.state.otherFaithCards}>
-          {(card) => (
-            <span class={css({ margin: '0 0.5rem' })}>
-              <Card cardId={card.toString()} />
-            </span>
-          )}
-        </For>
-      </div>
-      <div>
-        你的手牌
-        <For each={props.state.selfHand}>
-          {(card, i) => (
-            <p>
-              {i()}: <Card cardId={card.toString()} />
-            </p>
-          )}
-        </For>
-      </div>
-      <div>
-        你的信念牌
-        <For each={props.state.selfFaithCards}>
-          {(card) => (
-            <span class={css({ margin: '0 0.5rem' })}>
-              <Card cardId={card.toString()} />
-            </span>
-          )}
-        </For>
-      </div>
+      <table
+        class={css({
+          width: '100%',
+          borderCollapse: 'collapse',
+          marginBottom: '1rem',
+        })}
+      >
+        <tbody>
+          <tr>
+            <Td>当前回合</Td>
+            <Td>{props.state.roundNumber}</Td>
+          </tr>
+          <tr>
+            <Td>当前玩家</Td>
+            <Td>{props.state.isMyTurn ? '你' : '对方'}</Td>
+          </tr>
+          <tr>
+            <Td>对方牌库剩余</Td>
+            <Td>{props.state.otherDeckCount}</Td>
+          </tr>
+          <tr>
+            <Td>对方手牌数</Td>
+            <Td>{props.state.otherHandCount}</Td>
+          </tr>
+          <tr>
+            <Td>对方信念牌</Td>
+            <Td>
+              <For each={props.state.otherFaithCards}>
+                {(card) => (
+                  <span class={css({ margin: '0 0.5rem' })}>
+                    <Card cardId={card.toString()} />
+                  </span>
+                )}
+              </For>
+            </Td>
+          </tr>
+          <tr>
+            <Td>你的牌库剩余</Td>
+            <Td>{props.state.selfDeckCount}</Td>
+          </tr>
+          <tr>
+            <Td>你的手牌</Td>
+            <Td>
+              <For each={props.state.selfHand}>
+                {(card, i) => (
+                  <div>
+                    {i()}: <Card cardId={card.toString()} />
+                  </div>
+                )}
+              </For>
+            </Td>
+          </tr>
+          <tr>
+            <Td>你的信念牌</Td>
+            <Td>
+              <For each={props.state.selfFaithCards}>
+                {(card) => (
+                  <span class={css({ margin: '0 0.5rem' })}>
+                    <Card cardId={card.toString()} />
+                  </span>
+                )}
+              </For>
+            </Td>
+          </tr>
+        </tbody>
+      </table>
 
       <Show when={props.userEvent} keyed>
         {(userEvent) => (
@@ -217,6 +256,7 @@ const PlayCardComponent: Component<{
 
   return (
     <div>
+      <p>请选择要打出的卡牌索引（0 - {props.handCount - 1}）:</p>
       <input
         type="text"
         value={cardId()}
