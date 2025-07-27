@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
-    game::{room::Room, state::*},
-    grpc::RequestPlayCard,
+    game::{room::Room, state::*, user::TurnAction},
+    grpc::RequestTurnAction,
 };
 
 impl Room {
@@ -39,13 +39,21 @@ impl Room {
         self.perform(DrawCards { player, count: 1 });
 
         while !self.read_state(|gs| gs.turn_time_remaining().is_zero()) {
-            let card_index = self
-                .request_user_event(player, RequestPlayCard {})
+            let action = self
+                .request_user_event(player, RequestTurnAction {})
                 .await?
-                .map(|ev| ev.card_idx as usize)
-                .unwrap_or(0);
-            let card_id = self.perform(PlayCard { player, card_index }).unwrap();
-            self.perform(ExecuteCard { player, card_id });
+                .unwrap_or(TurnAction::EndTurn(Default::default()));
+            match action {
+                TurnAction::PlayCard(play_card) => {
+                    let card_index = play_card.card_idx as usize;
+                    let card_id = self.perform(PlayCard { player, card_index }).unwrap();
+                    self.perform(ExecuteCard { player, card_id });
+                }
+                TurnAction::EndTurn(_) => {
+                    self.perform(EndTurn { player });
+                    break;
+                }
+            }
         }
 
         Ok(())

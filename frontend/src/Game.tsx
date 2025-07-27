@@ -14,6 +14,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
 import {
+  EndTurn,
   GameState,
   PlayCard,
   RequestUserEvent,
@@ -232,15 +233,10 @@ const EventInput: Component<{
     <div>
       <p>剩余时间: {time()} 秒</p>
       <Switch>
-        <Match when={props.userEvent.eventType?.$case === 'playCard'}>
-          <PlayCardComponent
+        <Match when={props.userEvent.eventType?.$case === 'turnAction'}>
+          <TurnActionComponent
             handCount={props.state.selfHand.length}
-            onSubmit={(event) =>
-              props.onSubmit({
-                $case: 'playCard',
-                value: event,
-              })
-            }
+            onSubmit={props.onSubmit}
           />
         </Match>
       </Switch>
@@ -248,9 +244,9 @@ const EventInput: Component<{
   );
 };
 
-const PlayCardComponent: Component<{
+const TurnActionComponent: Component<{
   handCount: number;
-  onSubmit: (event: PlayCard) => void;
+  onSubmit: (event: UserEvent['eventType']) => void;
 }> = (props) => {
   const [cardId, setCardId] = createSignal('');
 
@@ -269,16 +265,41 @@ const PlayCardComponent: Component<{
         })}
       />
       <button
+        class={css({
+          padding: '0.5rem 1rem',
+          backgroundColor: '#007bff',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        })}
         onClick={() => {
           const cardIdx = parseInt(cardId(), 10);
           if (cardIdx >= 0 && cardIdx < props.handCount) {
-            props.onSubmit({ cardIdx });
+            props.onSubmit({
+              $case: 'playCard',
+              value: { cardIdx },
+            });
           } else {
             alert('无效的卡牌索引');
           }
         }}
       >
         Play Card
+      </button>
+
+      <button
+        class={css({
+          padding: '0.5rem 1rem',
+          backgroundColor: '#6c757d',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        })}
+        onClick={() => props.onSubmit({ $case: 'endTurn', value: {} })}
+      >
+        End Turn
       </button>
     </div>
   );

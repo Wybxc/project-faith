@@ -51,23 +51,29 @@ export interface GameState {
 export interface RequestUserEvent {
   readonly seqnum: Long;
   readonly timeout: number;
-  readonly eventType?: { readonly $case: "playCard"; readonly value: RequestPlayCard } | undefined;
+  readonly eventType?: { readonly $case: "turnAction"; readonly value: RequestTurnAction } | undefined;
 }
 
 export interface UserEvent {
   readonly seqnum: Long;
   readonly roomId: Long;
-  readonly eventType?: { readonly $case: "playCard"; readonly value: PlayCard } | undefined;
+  readonly eventType?: { readonly $case: "playCard"; readonly value: PlayCard } | {
+    readonly $case: "endTurn";
+    readonly value: EndTurn;
+  } | undefined;
 }
 
 export interface UserEventResponse {
 }
 
-export interface RequestPlayCard {
+export interface RequestTurnAction {
 }
 
 export interface PlayCard {
   readonly cardIdx: number;
+}
+
+export interface EndTurn {
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -525,8 +531,8 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
       writer.uint32(16).int32(message.timeout);
     }
     switch (message.eventType?.$case) {
-      case "playCard":
-        RequestPlayCard.encode(message.eventType.value, writer.uint32(26).fork()).join();
+      case "turnAction":
+        RequestTurnAction.encode(message.eventType.value, writer.uint32(26).fork()).join();
         break;
     }
     return writer;
@@ -560,7 +566,7 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
             break;
           }
 
-          message.eventType = { $case: "playCard", value: RequestPlayCard.decode(reader, reader.uint32()) };
+          message.eventType = { $case: "turnAction", value: RequestTurnAction.decode(reader, reader.uint32()) };
           continue;
         }
       }
@@ -582,9 +588,9 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
       : Long.UZERO;
     message.timeout = object.timeout ?? 0;
     switch (object.eventType?.$case) {
-      case "playCard": {
+      case "turnAction": {
         if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
-          message.eventType = { $case: "playCard", value: RequestPlayCard.fromPartial(object.eventType.value) };
+          message.eventType = { $case: "turnAction", value: RequestTurnAction.fromPartial(object.eventType.value) };
         }
         break;
       }
@@ -608,6 +614,9 @@ export const UserEvent: MessageFns<UserEvent> = {
     switch (message.eventType?.$case) {
       case "playCard":
         PlayCard.encode(message.eventType.value, writer.uint32(26).fork()).join();
+        break;
+      case "endTurn":
+        EndTurn.encode(message.eventType.value, writer.uint32(34).fork()).join();
         break;
     }
     return writer;
@@ -644,6 +653,14 @@ export const UserEvent: MessageFns<UserEvent> = {
           message.eventType = { $case: "playCard", value: PlayCard.decode(reader, reader.uint32()) };
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.eventType = { $case: "endTurn", value: EndTurn.decode(reader, reader.uint32()) };
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -668,6 +685,12 @@ export const UserEvent: MessageFns<UserEvent> = {
       case "playCard": {
         if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
           message.eventType = { $case: "playCard", value: PlayCard.fromPartial(object.eventType.value) };
+        }
+        break;
+      }
+      case "endTurn": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "endTurn", value: EndTurn.fromPartial(object.eventType.value) };
         }
         break;
       }
@@ -710,19 +733,19 @@ export const UserEventResponse: MessageFns<UserEventResponse> = {
   },
 };
 
-function createBaseRequestPlayCard(): RequestPlayCard {
+function createBaseRequestTurnAction(): RequestTurnAction {
   return {};
 }
 
-export const RequestPlayCard: MessageFns<RequestPlayCard> = {
-  encode(_: RequestPlayCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const RequestTurnAction: MessageFns<RequestTurnAction> = {
+  encode(_: RequestTurnAction, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): RequestPlayCard {
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestTurnAction {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseRequestPlayCard() as any;
+    const message = createBaseRequestTurnAction() as any;
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -735,11 +758,11 @@ export const RequestPlayCard: MessageFns<RequestPlayCard> = {
     return message;
   },
 
-  create<I extends Exact<DeepPartial<RequestPlayCard>, I>>(base?: I): RequestPlayCard {
-    return RequestPlayCard.fromPartial(base ?? ({} as any));
+  create<I extends Exact<DeepPartial<RequestTurnAction>, I>>(base?: I): RequestTurnAction {
+    return RequestTurnAction.fromPartial(base ?? ({} as any));
   },
-  fromPartial<I extends Exact<DeepPartial<RequestPlayCard>, I>>(_: I): RequestPlayCard {
-    const message = createBaseRequestPlayCard() as any;
+  fromPartial<I extends Exact<DeepPartial<RequestTurnAction>, I>>(_: I): RequestTurnAction {
+    const message = createBaseRequestTurnAction() as any;
     return message;
   },
 };
@@ -786,6 +809,40 @@ export const PlayCard: MessageFns<PlayCard> = {
   fromPartial<I extends Exact<DeepPartial<PlayCard>, I>>(object: I): PlayCard {
     const message = createBasePlayCard() as any;
     message.cardIdx = object.cardIdx ?? 0;
+    return message;
+  },
+};
+
+function createBaseEndTurn(): EndTurn {
+  return {};
+}
+
+export const EndTurn: MessageFns<EndTurn> = {
+  encode(_: EndTurn, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EndTurn {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEndTurn() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<EndTurn>, I>>(base?: I): EndTurn {
+    return EndTurn.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EndTurn>, I>>(_: I): EndTurn {
+    const message = createBaseEndTurn() as any;
     return message;
   },
 };

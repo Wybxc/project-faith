@@ -9,26 +9,23 @@ pub trait UserEvent {
     fn from_rpc(response: user_event::EventType) -> anyhow::Result<Self::Response>;
 }
 
-macro_rules! impl_user_event {
-    ($name:ident : $event:ident => $response:ident) => {
-        impl UserEvent for $event {
-            type Response = $response;
-
-            fn into_rpc(self) -> request_user_event::EventType {
-                request_user_event::EventType::$name(self)
-            }
-
-            fn from_rpc(response: user_event::EventType) -> anyhow::Result<Self::Response> {
-                match response {
-                    user_event::EventType::$name(ev) => Ok(ev),
-                    _ => Err(anyhow::anyhow!(concat!(
-                        "Invalid event type for ",
-                        stringify!($event)
-                    ))),
-                }
-            }
-        }
-    };
+pub enum TurnAction {
+    PlayCard(PlayCard),
+    EndTurn(EndTurn),
 }
 
-impl_user_event!(PlayCard: RequestPlayCard => PlayCard);
+impl UserEvent for RequestTurnAction {
+    type Response = TurnAction;
+
+    fn into_rpc(self) -> request_user_event::EventType {
+        request_user_event::EventType::TurnAction(self)
+    }
+
+    fn from_rpc(response: user_event::EventType) -> anyhow::Result<Self::Response> {
+        match response {
+            user_event::EventType::PlayCard(ev) => Ok(TurnAction::PlayCard(ev)),
+            user_event::EventType::EndTurn(ev) => Ok(TurnAction::EndTurn(ev)),
+            _ => Err(anyhow::anyhow!("Invalid event type for RequestTurnAction")),
+        }
+    }
+}

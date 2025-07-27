@@ -250,6 +250,22 @@ impl Action for ExecuteCard {
     }
 }
 
+pub struct EndTurn {
+    pub player: PlayerId,
+}
+
+impl Action for EndTurn {
+    type Output = ();
+
+    fn perform(&self, game_state: &mut GameState) {
+        game_state.turn_timer.pause();
+    }
+
+    fn debug_log(&self) -> String {
+        format!("玩家 {} 结束了回合。", self.player as u8)
+    }
+}
+
 /// 回合结束，增加回合数
 pub struct BumpRound;
 
