@@ -6,11 +6,14 @@ pub struct PlayerState {
     pub hand: Vec<CardId>,
     /// The player's deck of cards, from bottom to top.
     pub deck: Vec<CardId>,
+    /// Faith cards
+    pub faith: Vec<CardId>,
 }
 
 impl PlayerState {
-    pub fn initialize(&mut self, deck: Vec<CardId>) {
+    pub fn initialize(&mut self, deck: Vec<CardId>, faith_cards: Vec<CardId>) {
         self.hand.clear();
         self.deck = deck;
+        self.faith = faith_cards;
     }
 }

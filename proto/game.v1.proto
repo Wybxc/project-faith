@@ -3,57 +3,59 @@ syntax = "proto3";
 package game.v1;
 
 service GameService {
-    rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
-    rpc EnterGame(EnterGameRequest) returns (stream GameEvent);
-    rpc SubmitUserEvent(UserEvent) returns (UserEventResponse);
+  rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+  rpc EnterGame(EnterGameRequest) returns (stream GameEvent);
+  rpc SubmitUserEvent(UserEvent) returns (UserEventResponse);
 }
 
 message JoinRoomRequest {
-    string room_name = 1;
+  string room_name = 1;
 }
 
 message JoinRoomResponse {
-    string message = 1;
-    bool success = 2;
-    fixed64 room_id = 3;
+  string message = 1;
+  bool success = 2;
+  fixed64 room_id = 3;
 }
 
 message EnterGameRequest {
-    fixed64 room_id = 1;
+  fixed64 room_id = 1;
 }
 
 message GameEvent {
-    oneof event_type {
-        GameState state_update = 1;
-        RequestUserEvent request_user_event = 2;
-    }
+  oneof event_type {
+    GameState state_update = 1;
+    RequestUserEvent request_user_event = 2;
+  }
 }
 
 message GameState {
-    repeated uint32 self_hand = 1;
-    uint32 other_hand_count = 2;
-    uint32 self_deck_count = 3;
-    uint32 other_deck_count = 4;
-    uint32 round_number = 5;
-    bool is_my_turn = 6;
-    bool game_finished = 7;
-    repeated string debug_log = 8;
+  repeated string debug_log = 1;
+  repeated uint32 self_hand = 2;
+  uint32 other_hand_count = 3;
+  uint32 self_deck_count = 4;
+  uint32 other_deck_count = 5;
+  uint32 round_number = 6;
+  bool is_my_turn = 7;
+  bool game_finished = 8;
+  repeated uint32 self_faith_cards = 9;
+  repeated uint32 other_faith_cards = 10;
 }
 
 message RequestUserEvent {
-    fixed64 seqnum = 1;
-    int32 timeout = 2;
-    oneof event_type {
-        RequestPlayCard play_card = 3;
-    }
+  fixed64 seqnum = 1;
+  int32 timeout = 2;
+  oneof event_type {
+    RequestPlayCard play_card = 3;
+  }
 }
 
 message UserEvent {
-    fixed64 seqnum = 1;
-    fixed64 room_id = 2;
-    oneof event_type {
-        PlayCard play_card = 3;
-    }
+  fixed64 seqnum = 1;
+  fixed64 room_id = 2;
+  oneof event_type {
+    PlayCard play_card = 3;
+  }
 }
 
 message UserEventResponse {}
@@ -61,5 +63,5 @@ message UserEventResponse {}
 message RequestPlayCard {}
 
 message PlayCard {
-    uint32 card_idx = 1;
+  uint32 card_idx = 1;
 }

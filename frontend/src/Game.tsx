@@ -26,6 +26,7 @@ const Game: Component<{
 }> = (props) => {
   const [starting, setStarting] = createSignal(true);
   const [state, setState] = createStore<GameState>({
+    debugLog: [],
     selfHand: [],
     otherHandCount: 0,
     selfDeckCount: 0,
@@ -33,7 +34,8 @@ const Game: Component<{
     roundNumber: 0,
     isMyTurn: false,
     gameFinished: false,
-    debugLog: [],
+    selfFaithCards: [],
+    otherFaithCards: [],
   });
   const [userEvent, setUserEvent] = createSignal<RequestUserEvent | null>(null);
 
@@ -98,6 +100,16 @@ const GameBoard: Component<{
       <p>你的牌库剩余: {props.state.selfDeckCount}</p>
       <p>对方手牌数: {props.state.otherHandCount}</p>
       <div>
+        对方信念牌
+        <For each={props.state.otherFaithCards}>
+          {(card) => (
+            <span class={css({ margin: '0 0.5rem' })}>
+              <Card cardId={card.toString()} />
+            </span>
+          )}
+        </For>
+      </div>
+      <div>
         你的手牌
         <For each={props.state.selfHand}>
           {(card, i) => (
@@ -107,10 +119,24 @@ const GameBoard: Component<{
           )}
         </For>
       </div>
+      <div>
+        你的信念牌
+        <For each={props.state.selfFaithCards}>
+          {(card) => (
+            <span class={css({ margin: '0 0.5rem' })}>
+              <Card cardId={card.toString()} />
+            </span>
+          )}
+        </For>
+      </div>
 
       <Show when={props.userEvent} keyed>
         {(userEvent) => (
-          <EventInput userEvent={userEvent} onSubmit={props.onFinishEvent} />
+          <EventInput
+            state={props.state}
+            userEvent={userEvent}
+            onSubmit={props.onFinishEvent}
+          />
         )}
       </Show>
 
@@ -144,6 +170,7 @@ function createSingletonTimer(callback: () => void) {
 }
 
 const EventInput: Component<{
+  state: GameState;
   userEvent: RequestUserEvent;
   onSubmit: (event?: UserEvent['eventType']) => void;
 }> = (props) => {
@@ -168,6 +195,7 @@ const EventInput: Component<{
       <Switch>
         <Match when={props.userEvent.eventType?.$case === 'playCard'}>
           <PlayCardComponent
+            handCount={props.state.selfHand.length}
             onSubmit={(event) =>
               props.onSubmit({
                 $case: 'playCard',
@@ -182,6 +210,7 @@ const EventInput: Component<{
 };
 
 const PlayCardComponent: Component<{
+  handCount: number;
   onSubmit: (event: PlayCard) => void;
 }> = (props) => {
   const [cardId, setCardId] = createSignal('');
@@ -200,11 +229,14 @@ const PlayCardComponent: Component<{
         })}
       />
       <button
-        onClick={() =>
-          props.onSubmit({
-            cardIdx: parseInt(cardId(), 10),
-          })
-        }
+        onClick={() => {
+          const cardIdx = parseInt(cardId(), 10);
+          if (cardIdx >= 0 && cardIdx < props.handCount) {
+            props.onSubmit({ cardIdx });
+          } else {
+            alert('无效的卡牌索引');
+          }
+        }}
       >
         Play Card
       </button>

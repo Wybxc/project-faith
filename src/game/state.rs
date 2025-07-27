@@ -31,9 +31,15 @@ impl GameState {
         Default::default()
     }
 
-    fn initialize(&mut self, player0_deck: Vec<CardId>, player1_deck: Vec<CardId>) {
-        self.players.0.initialize(player0_deck);
-        self.players.1.initialize(player1_deck);
+    fn initialize(
+        &mut self,
+        player0_deck: Vec<CardId>,
+        player1_deck: Vec<CardId>,
+        player0_faith: Vec<CardId>,
+        player1_faith: Vec<CardId>,
+    ) {
+        self.players.0.initialize(player0_deck, player0_faith);
+        self.players.1.initialize(player1_deck, player1_faith);
         self.round = 0;
         self.finished = false;
         self.current_turn = PlayerId::Player0;
@@ -55,6 +61,7 @@ impl GameState {
     }
 
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
+        let debug_log = self.debug_log.clone();
         let self_hand = self.me(player).hand.iter().map(|id| id.0).collect();
         let other_hand_count = self.me(player.opp()).hand.len() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
@@ -62,8 +69,10 @@ impl GameState {
         let round_number = self.round;
         let is_my_turn = self.current_turn == player;
         let game_finished = self.finished;
-        let debug_log = self.debug_log.clone();
+        let self_faith_cards = self.me(player).faith.iter().map(|id| id.0).collect();
+        let other_faith_cards = self.me(player.opp()).faith.iter().map(|id| id.0).collect();
         grpc::GameState {
+            debug_log,
             self_hand,
             other_hand_count,
             self_deck_count,
@@ -71,14 +80,16 @@ impl GameState {
             round_number,
             is_my_turn,
             game_finished,
-            debug_log,
+            self_faith_cards,
+            other_faith_cards,
         }
     }
 
     /// Performs an action on the game state.
     pub fn perform<A: Action>(&mut self, action: A) -> A::Output {
+        let output = action.perform(self);
         self.debug_log.push(action.debug_log());
-        action.perform(self)
+        output
     }
 }
 
@@ -114,8 +125,10 @@ impl Action for Initalize {
 
     fn perform(&self, game_state: &mut GameState) {
         game_state.initialize(
-            vec![CardId(7001); 3], // Player 0's deck
-            vec![CardId(7002); 3], // Player 1's deck
+            vec![CardId(7001); 30], // Player 0's deck
+            vec![CardId(7002); 30], // Player 1's deck
+            vec![CardId(8001); 3],  // Player 0's faith
+            vec![CardId(8001); 3],  // Player 1's faith
         );
     }
 
@@ -213,6 +226,7 @@ impl Action for ExecuteCard {
                     skill(game_state, self.player);
                 }
             }
+            Card::Faith(_) => {}
         }
     }
 

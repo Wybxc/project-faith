@@ -36,6 +36,7 @@ export interface GameEvent {
 }
 
 export interface GameState {
+  readonly debugLog: readonly string[];
   readonly selfHand: readonly number[];
   readonly otherHandCount: number;
   readonly selfDeckCount: number;
@@ -43,7 +44,8 @@ export interface GameState {
   readonly roundNumber: number;
   readonly isMyTurn: boolean;
   readonly gameFinished: boolean;
-  readonly debugLog: readonly string[];
+  readonly selfFaithCards: readonly number[];
+  readonly otherFaithCards: readonly number[];
 }
 
 export interface RequestUserEvent {
@@ -311,6 +313,7 @@ export const GameEvent: MessageFns<GameEvent> = {
 
 function createBaseGameState(): GameState {
   return {
+    debugLog: [],
     selfHand: [],
     otherHandCount: 0,
     selfDeckCount: 0,
@@ -318,38 +321,49 @@ function createBaseGameState(): GameState {
     roundNumber: 0,
     isMyTurn: false,
     gameFinished: false,
-    debugLog: [],
+    selfFaithCards: [],
+    otherFaithCards: [],
   };
 }
 
 export const GameState: MessageFns<GameState> = {
   encode(message: GameState, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    writer.uint32(10).fork();
+    for (const v of message.debugLog) {
+      writer.uint32(10).string(v!);
+    }
+    writer.uint32(18).fork();
     for (const v of message.selfHand) {
       writer.uint32(v);
     }
     writer.join();
     if (message.otherHandCount !== 0) {
-      writer.uint32(16).uint32(message.otherHandCount);
+      writer.uint32(24).uint32(message.otherHandCount);
     }
     if (message.selfDeckCount !== 0) {
-      writer.uint32(24).uint32(message.selfDeckCount);
+      writer.uint32(32).uint32(message.selfDeckCount);
     }
     if (message.otherDeckCount !== 0) {
-      writer.uint32(32).uint32(message.otherDeckCount);
+      writer.uint32(40).uint32(message.otherDeckCount);
     }
     if (message.roundNumber !== 0) {
-      writer.uint32(40).uint32(message.roundNumber);
+      writer.uint32(48).uint32(message.roundNumber);
     }
     if (message.isMyTurn !== false) {
-      writer.uint32(48).bool(message.isMyTurn);
+      writer.uint32(56).bool(message.isMyTurn);
     }
     if (message.gameFinished !== false) {
-      writer.uint32(56).bool(message.gameFinished);
+      writer.uint32(64).bool(message.gameFinished);
     }
-    for (const v of message.debugLog) {
-      writer.uint32(66).string(v!);
+    writer.uint32(74).fork();
+    for (const v of message.selfFaithCards) {
+      writer.uint32(v);
     }
+    writer.join();
+    writer.uint32(82).fork();
+    for (const v of message.otherFaithCards) {
+      writer.uint32(v);
+    }
+    writer.join();
     return writer;
   },
 
@@ -361,13 +375,21 @@ export const GameState: MessageFns<GameState> = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1: {
-          if (tag === 8) {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.debugLog.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag === 16) {
             message.selfHand.push(reader.uint32());
 
             continue;
           }
 
-          if (tag === 10) {
+          if (tag === 18) {
             const end2 = reader.uint32() + reader.pos;
             while (reader.pos < end2) {
               message.selfHand.push(reader.uint32());
@@ -378,20 +400,12 @@ export const GameState: MessageFns<GameState> = {
 
           break;
         }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.otherHandCount = reader.uint32();
-          continue;
-        }
         case 3: {
           if (tag !== 24) {
             break;
           }
 
-          message.selfDeckCount = reader.uint32();
+          message.otherHandCount = reader.uint32();
           continue;
         }
         case 4: {
@@ -399,7 +413,7 @@ export const GameState: MessageFns<GameState> = {
             break;
           }
 
-          message.otherDeckCount = reader.uint32();
+          message.selfDeckCount = reader.uint32();
           continue;
         }
         case 5: {
@@ -407,7 +421,7 @@ export const GameState: MessageFns<GameState> = {
             break;
           }
 
-          message.roundNumber = reader.uint32();
+          message.otherDeckCount = reader.uint32();
           continue;
         }
         case 6: {
@@ -415,7 +429,7 @@ export const GameState: MessageFns<GameState> = {
             break;
           }
 
-          message.isMyTurn = reader.bool();
+          message.roundNumber = reader.uint32();
           continue;
         }
         case 7: {
@@ -423,16 +437,52 @@ export const GameState: MessageFns<GameState> = {
             break;
           }
 
-          message.gameFinished = reader.bool();
+          message.isMyTurn = reader.bool();
           continue;
         }
         case 8: {
-          if (tag !== 66) {
+          if (tag !== 64) {
             break;
           }
 
-          message.debugLog.push(reader.string());
+          message.gameFinished = reader.bool();
           continue;
+        }
+        case 9: {
+          if (tag === 72) {
+            message.selfFaithCards.push(reader.uint32());
+
+            continue;
+          }
+
+          if (tag === 74) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.selfFaithCards.push(reader.uint32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 10: {
+          if (tag === 80) {
+            message.otherFaithCards.push(reader.uint32());
+
+            continue;
+          }
+
+          if (tag === 82) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.otherFaithCards.push(reader.uint32());
+            }
+
+            continue;
+          }
+
+          break;
         }
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -448,6 +498,7 @@ export const GameState: MessageFns<GameState> = {
   },
   fromPartial<I extends Exact<DeepPartial<GameState>, I>>(object: I): GameState {
     const message = createBaseGameState() as any;
+    message.debugLog = object.debugLog?.map((e) => e) || [];
     message.selfHand = object.selfHand?.map((e) => e) || [];
     message.otherHandCount = object.otherHandCount ?? 0;
     message.selfDeckCount = object.selfDeckCount ?? 0;
@@ -455,7 +506,8 @@ export const GameState: MessageFns<GameState> = {
     message.roundNumber = object.roundNumber ?? 0;
     message.isMyTurn = object.isMyTurn ?? false;
     message.gameFinished = object.gameFinished ?? false;
-    message.debugLog = object.debugLog?.map((e) => e) || [];
+    message.selfFaithCards = object.selfFaithCards?.map((e) => e) || [];
+    message.otherFaithCards = object.otherFaithCards?.map((e) => e) || [];
     return message;
   },
 };
