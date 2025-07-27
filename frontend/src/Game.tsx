@@ -200,11 +200,16 @@ const Card: Component<{
 };
 
 let timer: number | null = null;
-function createSingletonTimer(callback: () => void) {
+let lastTime: number | null = null;
+function createSingletonTimer(callback: (elapsed: number) => void) {
   if (timer !== null) {
     clearInterval(timer);
+    lastTime = null; // Reset lastTime when timer is recreated
   }
-  timer = setInterval(callback, 1000);
+  timer = setInterval(() => {
+    callback(lastTime === null ? 100 : Date.now() - lastTime);
+    lastTime = Date.now();
+  }, 100);
 }
 
 const EventInput: Component<{
@@ -214,10 +219,10 @@ const EventInput: Component<{
 }> = (props) => {
   const [time, setTime] = createSignal<number | null>(null);
 
-  createSingletonTimer(() => {
+  createSingletonTimer((elapsed) => {
     setTime((prev) => {
       if (prev === null) return null; // If not enabled, do nothing
-      prev -= 1;
+      prev -= elapsed / 1000;
       if (prev <= 0) {
         props.onSubmit();
       }
@@ -229,7 +234,7 @@ const EventInput: Component<{
 
   return (
     <div>
-      <p>剩余时间: {time()} 秒</p>
+      <p>剩余时间: {Math.floor(time() ?? 0)} 秒</p>
       <Switch>
         <Match when={props.userEvent.eventType?.$case === 'turnAction'}>
           <TurnActionComponent
