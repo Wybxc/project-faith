@@ -2,16 +2,19 @@ use std::sync::LazyLock;
 
 use crate::{
     game::state::{DrawCards, GameState, PlayerId},
-    system::{Component, Entity},
+    impl_component,
     utils::Map,
 };
 
+/// 卡牌 ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CardId(pub u32);
+impl_component!(CardId);
 
-impl Component for CardId {
-    type Storage = Map<Entity, CardId>;
-}
+/// 卡牌位于玩家手牌中
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InHand(pub PlayerId);
+impl_component!(InHand);
 
 pub type Skill = Box<dyn Fn(&mut GameState, PlayerId) + Send + Sync>;
 

@@ -1,7 +1,7 @@
 use std::{time::Duration, vec};
 
 use crate::{
-    game::card::{CardDef, CardId, REGISTRY},
+    game::card::{CardDef, CardId, InHand, REGISTRY},
     grpc::{self},
     system::{Entity, System},
     utils::Timer,
@@ -81,15 +81,14 @@ impl GameState {
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
         let debug_log = self.debug_log.clone();
         let self_hand = self
-            .me(player)
-            .hand
-            .iter()
-            .map(|&e| grpc::HandCard {
-                card_id: self.system.get::<CardId>(e).unwrap().0,
+            .system
+            .query_eq(&InHand(player))
+            .map(|e| grpc::HandCard {
+                card_id: e.get::<CardId>(&self.system).unwrap().0,
                 entity: e.id(),
             })
             .collect();
-        let other_hand_count = self.me(player.opp()).hand.len() as u32;
+        let other_hand_count = self.system.query_eq(&InHand(player.opp())).count() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
         let round_number = self.round;
@@ -119,7 +118,7 @@ impl GameState {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlayerId {
     #[default]
     Player0 = 0,
@@ -138,8 +137,6 @@ impl PlayerId {
 
 #[derive(Default)]
 pub struct PlayerState {
-    /// The player's hand of cards, from left to right.
-    pub hand: Vec<Entity>,
     /// The player's deck of cards, from bottom to top.
     pub deck: Vec<Entity>,
     /// Faith cards
@@ -149,7 +146,6 @@ pub struct PlayerState {
 impl PlayerState {
     pub fn initialize(&mut self, system: &mut System, deck: Vec<CardId>, faith_cards: Vec<CardId>) {
         // 初始化时 system 为空，不需要删除旧卡牌
-        self.hand.clear();
         for card_id in deck {
             let entity = system.entity().component(card_id).spawn();
             self.deck.push(entity);
@@ -219,8 +215,10 @@ impl Action for DrawCards {
         for _ in 0..self.count {
             if let Some(card) = player_state.deck.pop() {
                 drawn_cards.push(card);
-                player_state.hand.push(card);
             }
+        }
+        for &card in &drawn_cards {
+            let _ = game_state.system.add_component(card, InHand(self.player));
         }
         drawn_cards
     }
@@ -240,8 +238,7 @@ impl Action for PlayCard {
     type Output = ();
 
     fn perform(&self, game_state: &mut GameState) -> Self::Output {
-        let player_state = game_state.me_mut(self.player);
-        player_state.hand.retain(|&e| e != self.card);
+        game_state.system.remove_component::<InHand>(self.card);
     }
 
     fn debug_log(&self) -> String {

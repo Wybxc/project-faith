@@ -23,6 +23,15 @@ pub trait Component: Send + Sync + 'static {
     type Storage: Storage<Component = Self> + 'static;
 }
 
+#[macro_export]
+macro_rules! impl_component {
+    ($name: ident) => {
+        impl $crate::system::Component for $name {
+            type Storage = $crate::utils::Map<$crate::system::Entity, $name>;
+        }
+    };
+}
+
 pub trait StorageBase: DowncastSync {
     fn delete(&mut self, entity: Entity) -> bool;
     fn has(&self, entity: Entity) -> bool;
@@ -36,6 +45,7 @@ pub trait Storage: StorageBase + Default {
     fn remove(&mut self, entity: Entity) -> Option<Self::Component>;
     fn get(&self, entity: Entity) -> Option<&Self::Component>;
     fn get_mut(&mut self, entity: Entity) -> Option<&mut Self::Component>;
+    fn iter(&self) -> impl Iterator<Item = (Entity, &Self::Component)>;
 }
 
 impl<C> StorageBase for Map<Entity, C>
@@ -77,6 +87,10 @@ where
     fn get_mut(&mut self, entity: Entity) -> Option<&mut Self::Component> {
         self.get_mut(&entity)
     }
+
+    fn iter(&self) -> impl Iterator<Item = (Entity, &Self::Component)> {
+        std::collections::HashMap::iter(self).map(|(e, c)| (*e, c))
+    }
 }
 
 #[derive(Default)]
@@ -110,14 +124,56 @@ impl System {
         }
     }
 
+    pub fn add_component<C: Component>(&mut self, entity: Entity, component: C) -> Result<(), C> {
+        self.storage_mut::<C>().add(entity, component)
+    }
+
+    pub fn remove_component<C: Component>(&mut self, entity: Entity) -> Option<C> {
+        self.storage_mut::<C>().remove(entity)
+    }
+
     pub fn despawn(&mut self, entity: Entity) {
         for storage in self.storages.values_mut() {
             storage.delete(entity);
         }
     }
 
-    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+    pub fn get_component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.storage::<C>()?.get(entity)
+    }
+
+    pub fn query<C: Component>(&self) -> impl Iterator<Item = Entity> {
+        self.storage::<C>()
+            .map(|storage| storage.iter().map(|(e, _)| e))
+            .into_iter()
+            .flatten()
+    }
+
+    pub fn query_with<'a, C: Component>(
+        &'a self,
+        query: impl Fn(&C) -> bool + 'a,
+    ) -> impl Iterator<Item = Entity> {
+        self.storage::<C>()
+            .map(|storage| {
+                storage
+                    .iter()
+                    .filter_map(move |(e, c)| query(c).then_some(e))
+            })
+            .into_iter()
+            .flatten()
+    }
+
+    pub fn query_eq<'a, C: Component + PartialEq>(
+        &'a self,
+        component: &'a C,
+    ) -> impl Iterator<Item = Entity> {
+        self.query_with::<C>(move |c| c == component)
+    }
+}
+
+impl Entity {
+    pub fn get<C: Component>(self, system: &System) -> Option<&C> {
+        system.get_component(self)
     }
 }
 

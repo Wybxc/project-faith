@@ -3,7 +3,12 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
-    game::{card::CardId, room::Room, state::*, user::TurnAction},
+    game::{
+        card::{CardId, InHand},
+        room::Room,
+        state::*,
+        user::TurnAction,
+    },
     grpc::RequestTurnAction,
     system::Entity,
 };
@@ -18,12 +23,9 @@ impl Room {
             self.turn(Player0).await?;
             self.turn(Player1).await?;
 
-            if self.read_state(|gs| {
-                gs.me(Player0).hand.is_empty()
-                    && gs.me(Player1).hand.is_empty()
-                    && gs.me(Player0).deck.is_empty()
-                    && gs.me(Player1).deck.is_empty()
-            }) {
+            if self
+                .read_state(|gs| gs.me(Player0).deck.is_empty() && gs.me(Player1).deck.is_empty())
+            {
                 break;
             }
 
@@ -41,9 +43,8 @@ impl Room {
 
         while !self.read_state(|gs| gs.turn_time_remaining().is_zero()) {
             let playable_cards = self.read_state(|gs| {
-                gs.me(player)
-                    .hand
-                    .iter()
+                gs.system()
+                    .query_eq(&InHand(player))
                     .map(|c| c.id())
                     .collect::<Vec<_>>()
             });
@@ -56,7 +57,7 @@ impl Room {
                     let card = Entity::from(play_card.entity);
                     self.perform(PlayCard { player, card });
                     let Some(card_id) =
-                        self.read_state(|gs| gs.system().get::<CardId>(card).copied())
+                        self.read_state(|gs| card.get::<CardId>(gs.system()).copied())
                     else {
                         continue; // 如果获取卡牌 ID 失败，继续等待
                     };
