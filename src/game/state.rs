@@ -3,7 +3,7 @@ use std::{time::Duration, vec};
 use crate::{
     game::card::{CardDef, CardId, InHand, REGISTRY},
     grpc::{self},
-    system::{Entity, System},
+    system::{Entity, Query, System, exact, has},
     utils::Timer,
 };
 
@@ -81,14 +81,17 @@ impl GameState {
     pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
         let debug_log = self.debug_log.clone();
         let self_hand = self
-            .system
-            .query_eq(&InHand(player))
-            .map(|e| grpc::HandCard {
-                card_id: e.get::<CardId>(&self.system).unwrap().0,
+            .system()
+            .query(has::<CardId>().and(exact(InHand(player))))
+            .map(|(e, (c, _))| grpc::HandCard {
+                card_id: c.0,
                 entity: e.id(),
             })
-            .collect();
-        let other_hand_count = self.system.query_eq(&InHand(player.opp())).count() as u32;
+            .collect::<Vec<_>>();
+        let other_hand_count = self
+            .system()
+            .query(has::<CardId>().and(exact(InHand(player.opp()))))
+            .count() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
         let other_deck_count = self.me(player.opp()).deck.len() as u32;
         let round_number = self.round;

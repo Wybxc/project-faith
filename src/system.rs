@@ -142,32 +142,11 @@ impl System {
         self.storage::<C>()?.get(entity)
     }
 
-    pub fn query<C: Component>(&self) -> impl Iterator<Item = Entity> {
-        self.storage::<C>()
-            .map(|storage| storage.iter().map(|(e, _)| e))
-            .into_iter()
-            .flatten()
-    }
-
-    pub fn query_with<'a, C: Component>(
+    pub fn query<'a, Q: Query + 'a>(
         &'a self,
-        query: impl Fn(&C) -> bool + 'a,
-    ) -> impl Iterator<Item = Entity> {
-        self.storage::<C>()
-            .map(|storage| {
-                storage
-                    .iter()
-                    .filter_map(move |(e, c)| query(c).then_some(e))
-            })
-            .into_iter()
-            .flatten()
-    }
-
-    pub fn query_eq<'a, C: Component + PartialEq>(
-        &'a self,
-        component: &'a C,
-    ) -> impl Iterator<Item = Entity> {
-        self.query_with::<C>(move |c| c == component)
+        query: Q,
+    ) -> impl Iterator<Item = (Entity, Q::Result<'a>)> + 'a {
+        query.execute_query(self)
     }
 }
 
@@ -193,5 +172,118 @@ impl<'a> EntityBuilder<'a> {
 
     pub fn spawn(self) -> Entity {
         self.entity
+    }
+}
+
+pub trait Query {
+    type Result<'s>
+    where
+        Self: 's;
+
+    fn execute_query<'s>(
+        self,
+        system: &'s System,
+    ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
+    where
+        Self: 's;
+
+    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>>;
+
+    fn and<Q2: Query>(self, other: Q2) -> And<Self, Q2>
+    where
+        Self: Sized,
+    {
+        And(self, other)
+    }
+}
+
+pub struct Has<C>(std::marker::PhantomData<C>);
+
+pub fn has<C>() -> Has<C> {
+    Has(std::marker::PhantomData)
+}
+
+impl<C: Component> Query for Has<C> {
+    type Result<'s> = &'s C;
+
+    fn execute_query<'s>(
+        self,
+        system: &'s System,
+    ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
+    where
+        Self: 's,
+    {
+        system
+            .storage::<C>()
+            .map(|storage| storage.iter())
+            .into_iter()
+            .flatten()
+    }
+
+    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
+        system
+            .storage::<C>()
+            .and_then(|storage| storage.get(entity))
+    }
+}
+
+pub struct Exact<C>(C);
+
+pub fn exact<C>(component: C) -> Exact<C> {
+    Exact(component)
+}
+
+impl<C: Component + PartialEq> Query for Exact<C> {
+    type Result<'s> = &'s C;
+
+    fn execute_query<'s>(
+        self,
+        system: &'s System,
+    ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
+    where
+        Self: 's,
+    {
+        system
+            .storage::<C>()
+            .map(move |storage| storage.iter().filter(move |&(_, c)| *c == self.0))
+            .into_iter()
+            .flatten()
+    }
+
+    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
+        system
+            .storage::<C>()
+            .and_then(|storage| storage.get(entity))
+            .filter(|&c| *c == self.0)
+    }
+}
+
+pub struct And<Q1, Q2>(Q1, Q2);
+
+impl<Q1: Query, Q2: Query> Query for And<Q1, Q2> {
+    type Result<'s>
+        = (Q1::Result<'s>, Q2::Result<'s>)
+    where
+        Q1: 's,
+        Q2: 's;
+
+    fn execute_query<'s>(
+        self,
+        system: &'s System,
+    ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
+    where
+        Self: 's,
+    {
+        self.0.execute_query(system).flat_map(move |(e, r1)| {
+            self.1
+                .execute_filter(system, e)
+                .map(move |r2| (e, (r1, r2)))
+        })
+    }
+
+    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
+        let r1 = self.0.execute_filter(system, entity)?;
+        let r2 = self.1.execute_filter(system, entity)?;
+        Some((r1, r2))
     }
 }

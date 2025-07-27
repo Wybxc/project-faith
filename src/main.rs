@@ -8,8 +8,8 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::grpc::*;
 
 mod auth;
-mod system;
 mod game;
+mod system;
 mod utils;
 
 mod grpc {

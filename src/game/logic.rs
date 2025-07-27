@@ -10,7 +10,7 @@ use crate::{
         user::TurnAction,
     },
     grpc::RequestTurnAction,
-    system::Entity,
+    system::{Entity, Query, exact, has},
 };
 
 impl Room {
@@ -44,8 +44,8 @@ impl Room {
         while !self.read_state(|gs| gs.turn_time_remaining().is_zero()) {
             let playable_cards = self.read_state(|gs| {
                 gs.system()
-                    .query_eq(&InHand(player))
-                    .map(|c| c.id())
+                    .query(has::<CardId>().and(exact(InHand(player))))
+                    .map(|(e, _)| e.id())
                     .collect::<Vec<_>>()
             });
             let action = self
