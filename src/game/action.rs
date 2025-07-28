@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use crate::{
     game::{
-        card::{CardDef, CardId, InDeck, InHand, REGISTRY},
+        card::{
+            CardId, InDeck, InHand,
+            prototype::{Prototype, REGISTRY},
+        },
         player::{CurrentTurn, PlayerId, PlayerState},
         state::{DebugLog, GlobalState, TurnTimer},
     },
@@ -145,7 +148,7 @@ impl Action for ExecuteCard {
             return; // 卡牌不存在
         };
         match card {
-            CardDef::Order(order_card) => {
+            Prototype::Order(order_card) => {
                 for skill in &order_card.skills {
                     skill(&mut Handle(world), self.player);
                 }
@@ -154,7 +157,7 @@ impl Action for ExecuteCard {
                     self.player as u8, self.card_id.0
                 ));
             }
-            CardDef::Faith(_) => {}
+            Prototype::Faith(_) => {}
         }
     }
 }
