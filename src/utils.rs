@@ -8,21 +8,13 @@ pub struct Timer {
     started: bool,
 }
 
-impl Default for Timer {
-    fn default() -> Self {
-        Self {
-            duration: Duration::ZERO,
-            start_time: Instant::now(),
-            started: false,
-        }
-    }
-}
-
 impl Timer {
-    pub fn reset(&mut self, duration: Duration) {
-        self.duration = duration;
-        self.start_time = Instant::now();
-        self.started = true;
+    pub fn new(duration: Duration) -> Self {
+        Self {
+            duration,
+            start_time: Instant::now(),
+            started: true,
+        }
     }
 
     pub fn start(&mut self) {

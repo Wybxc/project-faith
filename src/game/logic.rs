@@ -42,9 +42,11 @@ impl Room {
         self.perform(TurnStart { player });
         self.perform(DrawCards { player, count: 1 });
 
-        while !self.read(|system| {
-            let gs = system.resource::<GameState>().unwrap();
-            gs.turn_time_remaining().is_zero()
+        while self.read(|system| {
+            system
+                .resource::<TurnTimer>()
+                .map(|timer| !timer.0.remaining().is_zero())
+                == Some(true)
         }) {
             let playable_cards = self.read(|system| {
                 system

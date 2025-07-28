@@ -1,7 +1,4 @@
-use std::{
-    any::{Any, TypeId},
-    collections::hash_map::Entry,
-};
+use std::any::{Any, TypeId};
 
 use downcast_rs::{DowncastSync, impl_downcast};
 
@@ -44,7 +41,7 @@ impl_downcast!(StorageBase);
 pub trait Storage: StorageBase + Default {
     type Component;
 
-    fn add(&mut self, entity: Entity, component: Self::Component) -> Result<(), Self::Component>;
+    fn add(&mut self, entity: Entity, component: Self::Component) -> Option<Self::Component>;
     fn remove(&mut self, entity: Entity) -> Option<Self::Component>;
     fn get(&self, entity: Entity) -> Option<&Self::Component>;
     fn get_mut(&mut self, entity: Entity) -> Option<&mut Self::Component>;
@@ -70,13 +67,8 @@ where
 {
     type Component = C;
 
-    fn add(&mut self, entity: Entity, component: Self::Component) -> Result<(), Self::Component> {
-        if let Entry::Vacant(e) = self.entry(entity) {
-            e.insert(component);
-            Ok(())
-        } else {
-            Err(component)
-        }
+    fn add(&mut self, entity: Entity, component: Self::Component) -> Option<Self::Component> {
+        self.insert(entity, component)
     }
 
     fn remove(&mut self, entity: Entity) -> Option<Self::Component> {
@@ -146,8 +138,10 @@ impl System {
         self.resource_or_insert(|| R::default())
     }
 
-    pub fn add_resource<R: Any + Send + Sync>(&mut self, resource: R) {
-        self.resources.insert(TypeId::of::<R>(), Box::new(resource));
+    pub fn add_resource<R: Any + Send + Sync>(&mut self, resource: R) -> Option<R> {
+        self.resources.insert(TypeId::of::<R>(), Box::new(resource))
+            .and_then(|r| r.downcast::<R>().ok())
+            .map(|r| *r)
     }
 
     pub fn remove_resource<R: Any + Send + Sync>(&mut self) -> Option<R> {
@@ -166,7 +160,7 @@ impl System {
         }
     }
 
-    pub fn add_component<C: Component>(&mut self, entity: Entity, component: C) -> Result<(), C> {
+    pub fn add_component<C: Component>(&mut self, entity: Entity, component: C) -> Option<C> {
         self.storage_mut::<C>().add(entity, component)
     }
 
@@ -197,7 +191,7 @@ impl System {
 }
 
 impl Entity {
-    pub fn add<C: Component>(self, system: &mut System, component: C) -> Result<(), C> {
+    pub fn add<C: Component>(self, system: &mut System, component: C) -> Option<C> {
         system.add_component(self, component)
     }
 
@@ -222,7 +216,7 @@ pub struct EntityBuilder<'a> {
 impl<'a> EntityBuilder<'a> {
     pub fn component<C: Component>(self, component: C) -> Self {
         let storage = self.system.storage_mut::<C>();
-        if storage.add(self.entity, component).is_err() {
+        if storage.add(self.entity, component).is_some() {
             panic!("Component already exists for this entity");
         }
         self

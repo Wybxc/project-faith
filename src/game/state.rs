@@ -22,9 +22,6 @@ pub struct GameState {
 
     /// Current player's turn.
     current_turn: PlayerId,
-
-    /// Timer for the current turn.
-    turn_timer: Timer,
 }
 
 impl GameState {
@@ -63,10 +60,6 @@ impl GameState {
             PlayerId::Player0 => &mut self.players.0,
             PlayerId::Player1 => &mut self.players.1,
         }
-    }
-
-    pub fn turn_time_remaining(&self) -> Duration {
-        self.turn_timer.remaining()
     }
 
     pub fn to_client(&self, player: PlayerId, system: &System) -> grpc::GameState {
@@ -153,6 +146,8 @@ impl PlayerState {
     }
 }
 
+pub struct TurnTimer(pub Timer);
+
 #[derive(Default, Clone)]
 pub struct DebugLog {
     pub entries: Vec<String>,
@@ -202,8 +197,8 @@ impl Action for TurnStart {
     fn perform(&self, system: &mut System) {
         let gs = system.resource_mut::<GameState>().unwrap();
         gs.current_turn = self.player;
-        gs.turn_timer.reset(Duration::from_secs(30));
-        gs.turn_timer.start();
+
+        system.add_resource(TurnTimer(Timer::new(Duration::from_secs(30))));
 
         system.resource_or_default::<DebugLog>().push(format!(
             "回合开始，当前为玩家 {} 的回合。",
@@ -296,8 +291,7 @@ impl Action for EndTurn {
     type Output = ();
 
     fn perform(&self, system: &mut System) {
-        let gs = system.resource_mut::<GameState>().unwrap();
-        gs.turn_timer.pause();
+        system.remove_resource::<TurnTimer>();
 
         system
             .resource_or_default::<DebugLog>()

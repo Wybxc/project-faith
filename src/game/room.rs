@@ -11,7 +11,7 @@ use tonic::Status;
 
 use crate::{
     game::{
-        state::{Action, GameState, PlayerId},
+        state::{Action, GameState, PlayerId, TurnTimer},
         user::UserEvent,
     },
     grpc::*,
@@ -191,8 +191,8 @@ impl Room {
             seqnum: seqnum as u64,
             timeout: self.read(|system| {
                 system
-                    .resource::<GameState>()
-                    .map(|s| s.turn_time_remaining().as_millis() as i32)
+                    .resource::<TurnTimer>()
+                    .map(|s| s.0.remaining().as_millis() as i32)
                     .unwrap_or(0)
             }),
             event_type: Some(request.into_rpc()),
@@ -220,8 +220,8 @@ impl Room {
                 if let Some(req) = pending_event.as_mut() {
                     req.timeout = this.read(|system| {
                         system
-                            .resource::<GameState>()
-                            .map(|s| s.turn_time_remaining().as_millis() as i32)
+                            .resource::<TurnTimer>()
+                            .map(|s| s.0.remaining().as_millis() as i32)
                             .unwrap_or(0)
                     });
                     if req.timeout <= 0 {
