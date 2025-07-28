@@ -45,7 +45,7 @@ pub struct Room {
     p1_pending_event: Mutex<Option<RequestUserEvent>>,
 
     pub room_state: Atomic<RoomState>,
-    pub game: Mutex<(GameState, System)>,
+    pub game: Mutex<System>,
 }
 
 impl Room {
@@ -139,31 +139,32 @@ impl Room {
 }
 
 impl Room {
-    pub fn read<T>(&self, reader: impl FnOnce(&GameState, &System) -> T) -> T {
+    pub fn read<T>(&self, reader: impl FnOnce(&System) -> T) -> T {
         let game = self.game.lock();
-        let (state, system) = &*game;
-        reader(state, system)
+        reader(&game)
     }
 
     pub fn sync_game_state(&self) {
         // Send the current game state to the player
         let game = self.game.lock();
-        let (state, system) = &*game;
-        let p0_game_state = state.to_client(PlayerId::Player0, system);
-        let p1_game_state = state.to_client(PlayerId::Player1, system);
-        let _ = self.p0_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::StateUpdate(p0_game_state)),
-        });
-        let _ = self.p1_sender.send(GameEvent {
-            event_type: Some(game_event::EventType::StateUpdate(p1_game_state)),
-        });
+        if let Some(game_state) = game.resource::<GameState>() {
+            let _ = self.p0_sender.send(GameEvent {
+                event_type: Some(game_event::EventType::StateUpdate(
+                    game_state.to_client(PlayerId::Player0, &game),
+                )),
+            });
+            let _ = self.p1_sender.send(GameEvent {
+                event_type: Some(game_event::EventType::StateUpdate(
+                    game_state.to_client(PlayerId::Player1, &game),
+                )),
+            });
+        }
     }
 
     pub fn perform<A: Action>(&self, action: A) -> A::Output {
         let output = {
             let mut game = self.game.lock();
-            let (state, system) = &mut *game;
-            state.perform(system, action)
+            action.perform(&mut game)
         };
 
         self.sync_game_state();
@@ -188,7 +189,12 @@ impl Room {
 
         let request = RequestUserEvent {
             seqnum: seqnum as u64,
-            timeout: self.read(|gs, _| gs.turn_time_remaining().as_millis() as i32),
+            timeout: self.read(|system| {
+                system
+                    .resource::<GameState>()
+                    .map(|s| s.turn_time_remaining().as_millis() as i32)
+                    .unwrap_or(0)
+            }),
             event_type: Some(request.into_rpc()),
         };
         let _ = event_sender.send(GameEvent {
@@ -212,7 +218,12 @@ impl Room {
                     PlayerId::Player1 => this.p1_pending_event.lock(),
                 };
                 if let Some(req) = pending_event.as_mut() {
-                    req.timeout = this.read(|gs, _| gs.turn_time_remaining().as_millis() as i32);
+                    req.timeout = this.read(|system| {
+                        system
+                            .resource::<GameState>()
+                            .map(|s| s.turn_time_remaining().as_millis() as i32)
+                            .unwrap_or(0)
+                    });
                     if req.timeout <= 0 {
                         break; // Timeout reached, exit countdown
                     }

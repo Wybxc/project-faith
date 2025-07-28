@@ -1,4 +1,7 @@
-use std::{any::TypeId, collections::hash_map::Entry};
+use std::{
+    any::{Any, TypeId},
+    collections::hash_map::Entry,
+};
 
 use downcast_rs::{DowncastSync, impl_downcast};
 
@@ -96,6 +99,7 @@ where
 #[derive(Default)]
 pub struct System {
     storages: Map<TypeId, Box<dyn StorageBase + Send + Sync>>,
+    resources: Map<TypeId, Box<dyn Any + Send + Sync>>,
     entity_counter: u32,
 }
 
@@ -113,6 +117,44 @@ impl System {
             .as_any_mut()
             .downcast_mut::<C::Storage>()
             .unwrap()
+    }
+
+    pub fn resource<R: Any + Send + Sync>(&self) -> Option<&R> {
+        self.resources
+            .get(&TypeId::of::<R>())
+            .and_then(|r| r.downcast_ref::<R>())
+    }
+
+    pub fn resource_mut<R: Any + Send + Sync>(&mut self) -> Option<&mut R> {
+        self.resources
+            .get_mut(&TypeId::of::<R>())
+            .and_then(|r| r.downcast_mut::<R>())
+    }
+
+    pub fn resource_or_insert<R: Any + Send + Sync, F: FnOnce() -> R>(
+        &mut self,
+        default: F,
+    ) -> &mut R {
+        self.resources
+            .entry(TypeId::of::<R>())
+            .or_insert_with(|| Box::new(default()))
+            .downcast_mut::<R>()
+            .unwrap()
+    }
+
+    pub fn resource_or_default<R: Any + Default + Send + Sync>(&mut self) -> &mut R {
+        self.resource_or_insert(|| R::default())
+    }
+
+    pub fn add_resource<R: Any + Send + Sync>(&mut self, resource: R) {
+        self.resources.insert(TypeId::of::<R>(), Box::new(resource));
+    }
+
+    pub fn remove_resource<R: Any + Send + Sync>(&mut self) -> Option<R> {
+        self.resources
+            .remove(&TypeId::of::<R>())
+            .and_then(|r| r.downcast::<R>().ok())
+            .map(|r| *r)
     }
 
     pub fn entity(&mut self) -> EntityBuilder {

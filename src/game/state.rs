@@ -25,9 +25,6 @@ pub struct GameState {
 
     /// Timer for the current turn.
     turn_timer: Timer,
-
-    /// Debug log for tracing actions.
-    debug_log: Vec<String>,
 }
 
 impl GameState {
@@ -52,7 +49,6 @@ impl GameState {
         self.round = 0;
         self.finished = false;
         self.current_turn = PlayerId::Player0;
-        self.debug_log.clear();
     }
 
     pub fn me(&self, player: PlayerId) -> &PlayerState {
@@ -74,7 +70,11 @@ impl GameState {
     }
 
     pub fn to_client(&self, player: PlayerId, system: &System) -> grpc::GameState {
-        let debug_log = self.debug_log.clone();
+        let debug_log = system
+            .resource::<DebugLog>()
+            .cloned()
+            .unwrap_or_default()
+            .entries;
         let self_hand = system
             .query(has::<CardId>().and(exact(InHand(player))))
             .map(|(e, (c, _))| grpc::HandCard {
@@ -104,13 +104,6 @@ impl GameState {
             self_faith_cards,
             other_faith_cards,
         }
-    }
-
-    /// Performs an action on the game state.
-    pub fn perform<A: Action>(&mut self, system: &mut System, action: A) -> A::Output {
-        let output = action.perform(self, system);
-        self.debug_log.push(action.debug_log());
-        output
     }
 }
 
@@ -160,11 +153,21 @@ impl PlayerState {
     }
 }
 
+#[derive(Default, Clone)]
+pub struct DebugLog {
+    pub entries: Vec<String>,
+}
+
+impl DebugLog {
+    pub fn push(&mut self, entry: impl Into<String>) {
+        self.entries.push(entry.into());
+    }
+}
+
 pub trait Action {
     type Output;
 
-    fn perform(&self, game_state: &mut GameState, system: &mut System) -> Self::Output;
-    fn debug_log(&self) -> String;
+    fn perform(&self, system: &mut System) -> Self::Output;
 }
 
 /// 初始化游戏状态
@@ -173,7 +176,8 @@ pub struct Initalize;
 impl Action for Initalize {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, system: &mut System) {
+    fn perform(&self, system: &mut System) {
+        let mut game_state = GameState::new();
         game_state.initialize(
             system,
             vec![CardId(7001); 30], // Player 0's deck
@@ -181,10 +185,9 @@ impl Action for Initalize {
             vec![CardId(8001); 3],  // Player 0's faith
             vec![CardId(8001); 3],  // Player 1's faith
         );
-    }
+        system.add_resource(game_state);
 
-    fn debug_log(&self) -> String {
-        "游戏开始。".to_string()
+        system.resource_or_default::<DebugLog>().push("游戏开始。");
     }
 }
 
@@ -196,14 +199,16 @@ pub struct TurnStart {
 impl Action for TurnStart {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
-        game_state.current_turn = self.player;
-        game_state.turn_timer.reset(Duration::from_secs(30));
-        game_state.turn_timer.start();
-    }
+    fn perform(&self, system: &mut System) {
+        let gs = system.resource_mut::<GameState>().unwrap();
+        gs.current_turn = self.player;
+        gs.turn_timer.reset(Duration::from_secs(30));
+        gs.turn_timer.start();
 
-    fn debug_log(&self) -> String {
-        format!("回合开始，当前玩家：{}", self.player as u8)
+        system.resource_or_default::<DebugLog>().push(format!(
+            "回合开始，当前为玩家 {} 的回合。",
+            self.player as u8,
+        ));
     }
 }
 
@@ -216,21 +221,22 @@ pub struct DrawCards {
 impl Action for DrawCards {
     type Output = Vec<Entity>;
 
-    fn perform(&self, game_state: &mut GameState, system: &mut System) -> Self::Output {
-        let player_state = game_state.me_mut(self.player);
+    fn perform(&self, system: &mut System) -> Self::Output {
         let mut drawn_cards = Vec::new();
         for _ in 0..self.count {
+            let gs = system.resource_mut::<GameState>().unwrap();
+            let player_state = gs.me_mut(self.player);
             if let Some(card) = player_state.deck.pop() {
                 card.remove::<InDeck>(system);
                 let _ = card.add(system, InHand(self.player));
                 drawn_cards.push(card);
             }
         }
+        system.resource_or_default::<DebugLog>().push(format!(
+            "玩家 {} 抽了 {} 张牌。",
+            self.player as u8, self.count
+        ));
         drawn_cards
-    }
-
-    fn debug_log(&self) -> String {
-        format!("玩家 {} 抽了 {} 张牌。", self.player as u8, self.count)
     }
 }
 
@@ -243,12 +249,14 @@ pub struct PlayCard {
 impl Action for PlayCard {
     type Output = ();
 
-    fn perform(&self, _game_state: &mut GameState, system: &mut System) -> Self::Output {
+    fn perform(&self, system: &mut System) -> Self::Output {
         self.card.remove::<InHand>(system);
-    }
 
-    fn debug_log(&self) -> String {
-        format!("玩家 {} 使用了手牌 {}。", self.player as u8, self.card.id())
+        system.resource_or_default::<DebugLog>().push(format!(
+            "玩家 {} 使用了手牌 {}。",
+            self.player as u8,
+            self.card.id()
+        ));
     }
 }
 
@@ -261,25 +269,22 @@ pub struct ExecuteCard {
 impl Action for ExecuteCard {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, system: &mut System) {
+    fn perform(&self, system: &mut System) {
         let Some(card) = REGISTRY.cards.get(&self.card_id) else {
             return; // 卡牌不存在
         };
         match card {
             CardDef::Order(order_card) => {
                 for skill in &order_card.skills {
-                    skill(game_state, system, self.player);
+                    skill(system, self.player);
                 }
+                system.resource_or_default::<DebugLog>().push(format!(
+                    "玩家 {} 执行了卡牌编号 {} 的效果。",
+                    self.player as u8, self.card_id.0
+                ));
             }
             CardDef::Faith(_) => {}
         }
-    }
-
-    fn debug_log(&self) -> String {
-        format!(
-            "玩家 {} 执行了卡牌编号 {} 的效果。",
-            self.player as u8, self.card_id.0
-        )
     }
 }
 
@@ -290,12 +295,13 @@ pub struct EndTurn {
 impl Action for EndTurn {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
-        game_state.turn_timer.pause();
-    }
+    fn perform(&self, system: &mut System) {
+        let gs = system.resource_mut::<GameState>().unwrap();
+        gs.turn_timer.pause();
 
-    fn debug_log(&self) -> String {
-        format!("玩家 {} 结束了回合。", self.player as u8)
+        system
+            .resource_or_default::<DebugLog>()
+            .push(format!("玩家 {} 结束了回合。", self.player as u8));
     }
 }
 
@@ -305,12 +311,13 @@ pub struct BumpRound;
 impl Action for BumpRound {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
-        game_state.round += 1;
-    }
+    fn perform(&self, system: &mut System) {
+        let gs = system.resource_mut::<GameState>().unwrap();
+        gs.round += 1;
 
-    fn debug_log(&self) -> String {
-        "回合数增加。".to_string()
+        system
+            .resource_or_default::<DebugLog>()
+            .push("回合数增加。".to_string());
     }
 }
 
@@ -320,11 +327,12 @@ pub struct GameFinished;
 impl Action for GameFinished {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
-        game_state.finished = true;
-    }
+    fn perform(&self, system: &mut System) {
+        let gs = system.resource_mut::<GameState>().unwrap();
+        gs.finished = true;
 
-    fn debug_log(&self) -> String {
-        "游戏结束。".to_string()
+        system
+            .resource_or_default::<DebugLog>()
+            .push("游戏结束。".to_string());
     }
 }

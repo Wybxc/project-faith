@@ -23,7 +23,10 @@ impl Room {
             self.turn(Player0).await?;
             self.turn(Player1).await?;
 
-            if self.read(|gs, _| gs.me(Player0).deck.is_empty() && gs.me(Player1).deck.is_empty()) {
+            if self.read(|system| {
+                let gs = system.resource::<GameState>().unwrap();
+                gs.me(Player0).deck.is_empty() && gs.me(Player1).deck.is_empty()
+            }) {
                 break;
             }
 
@@ -39,8 +42,11 @@ impl Room {
         self.perform(TurnStart { player });
         self.perform(DrawCards { player, count: 1 });
 
-        while !self.read(|gs, _| gs.turn_time_remaining().is_zero()) {
-            let playable_cards = self.read(|_, system| {
+        while !self.read(|system| {
+            let gs = system.resource::<GameState>().unwrap();
+            gs.turn_time_remaining().is_zero()
+        }) {
+            let playable_cards = self.read(|system| {
                 system
                     .query(has::<CardId>().and(exact(InHand(player))))
                     .map(|(e, _)| e.id())
@@ -54,7 +60,7 @@ impl Room {
                 TurnAction::PlayCard(play_card) => {
                     let card = Entity::from(play_card.entity);
                     self.perform(PlayCard { player, card });
-                    let Some(card_id) = self.read(|_, system| card.get::<CardId>(system).copied())
+                    let Some(card_id) = self.read(|system| card.get::<CardId>(system).copied())
                     else {
                         continue; // 如果获取卡牌 ID 失败，继续等待
                     };
