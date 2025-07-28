@@ -89,13 +89,13 @@ where
 }
 
 #[derive(Default)]
-pub struct System {
+pub struct World {
     storages: Map<TypeId, Box<dyn StorageBase + Send + Sync>>,
     resources: Map<TypeId, Box<dyn Any + Send + Sync>>,
     entity_counter: u32,
 }
 
-impl System {
+impl World {
     fn storage<C: Component>(&self) -> Option<&C::Storage> {
         self.storages
             .get(&TypeId::of::<C::Storage>())
@@ -156,7 +156,7 @@ impl System {
         let entity = Entity(self.entity_counter);
         self.entity_counter += 1;
         EntityBuilder {
-            system: self,
+            world: self,
             entity,
         }
     }
@@ -202,44 +202,44 @@ impl System {
 }
 
 impl Entity {
-    pub fn add<C: Component>(self, system: &mut System, component: C) -> Option<C> {
-        system.add_component(self, component)
+    pub fn add<C: Component>(self, world: &mut World, component: C) -> Option<C> {
+        world.add_component(self, component)
     }
 
-    pub fn remove<C: Component>(self, system: &mut System) -> Option<C> {
-        system.remove_component::<C>(self)
+    pub fn remove<C: Component>(self, world: &mut World) -> Option<C> {
+        world.remove_component::<C>(self)
     }
 
-    pub fn has<C: Component>(self, system: &System) -> bool {
-        system.has_component::<C>(self)
+    pub fn has<C: Component>(self, world: &World) -> bool {
+        world.has_component::<C>(self)
     }
 
-    pub fn get<C: Component>(self, system: &System) -> Option<&C> {
-        system.get_component(self)
+    pub fn get<C: Component>(self, world: &World) -> Option<&C> {
+        world.get_component(self)
     }
 
-    pub fn get_mut<C: Component>(self, system: &mut System) -> Option<&mut C> {
-        system.get_component_mut(self)
+    pub fn get_mut<C: Component>(self, world: &mut World) -> Option<&mut C> {
+        world.get_component_mut(self)
     }
 }
 
 #[must_use]
 pub struct EntityBuilder<'a> {
-    system: &'a mut System,
+    world: &'a mut World,
     entity: Entity,
 }
 
 impl<'a> EntityBuilder<'a> {
     pub fn component<C: Component>(self, component: C) -> Self {
-        let storage = self.system.storage_mut::<C>();
+        let storage = self.world.storage_mut::<C>();
         if storage.add(self.entity, component).is_some() {
             panic!("Component already exists for this entity");
         }
         self
     }
 
-    pub fn component_with<C: Component>(self, builder: impl FnOnce(&mut System) -> C) -> Self {
-        let component = builder(self.system);
+    pub fn component_with<C: Component>(self, builder: impl FnOnce(&mut World) -> C) -> Self {
+        let component = builder(self.world);
         self.component(component)
     }
 
@@ -255,12 +255,12 @@ pub trait Query {
 
     fn execute_query<'s>(
         self,
-        system: &'s System,
+        world: &'s World,
     ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
     where
         Self: 's;
 
-    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>>;
+    fn execute_filter<'s>(&self, world: &'s World, entity: Entity) -> Option<Self::Result<'s>>;
 
     fn and<Q2: Query>(self, other: Q2) -> And<Self, Q2>
     where
@@ -281,22 +281,20 @@ impl<C: Component> Query for Has<C> {
 
     fn execute_query<'s>(
         self,
-        system: &'s System,
+        world: &'s World,
     ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
     where
         Self: 's,
     {
-        system
+        world
             .storage::<C>()
             .map(|storage| storage.iter())
             .into_iter()
             .flatten()
     }
 
-    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
-        system
-            .storage::<C>()
-            .and_then(|storage| storage.get(entity))
+    fn execute_filter<'s>(&self, world: &'s World, entity: Entity) -> Option<Self::Result<'s>> {
+        world.storage::<C>().and_then(|storage| storage.get(entity))
     }
 }
 
@@ -311,20 +309,20 @@ impl<C: Component + PartialEq> Query for Exact<C> {
 
     fn execute_query<'s>(
         self,
-        system: &'s System,
+        world: &'s World,
     ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
     where
         Self: 's,
     {
-        system
+        world
             .storage::<C>()
             .map(move |storage| storage.iter().filter(move |&(_, c)| *c == self.0))
             .into_iter()
             .flatten()
     }
 
-    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
-        system
+    fn execute_filter<'s>(&self, world: &'s World, entity: Entity) -> Option<Self::Result<'s>> {
+        world
             .storage::<C>()
             .and_then(|storage| storage.get(entity))
             .filter(|&c| *c == self.0)
@@ -342,21 +340,19 @@ impl<Q1: Query, Q2: Query> Query for And<Q1, Q2> {
 
     fn execute_query<'s>(
         self,
-        system: &'s System,
+        world: &'s World,
     ) -> impl Iterator<Item = (Entity, Self::Result<'s>)> + 's
     where
         Self: 's,
     {
-        self.0.execute_query(system).flat_map(move |(e, r1)| {
-            self.1
-                .execute_filter(system, e)
-                .map(move |r2| (e, (r1, r2)))
-        })
+        self.0
+            .execute_query(world)
+            .flat_map(move |(e, r1)| self.1.execute_filter(world, e).map(move |r2| (e, (r1, r2))))
     }
 
-    fn execute_filter<'s>(&self, system: &'s System, entity: Entity) -> Option<Self::Result<'s>> {
-        let r1 = self.0.execute_filter(system, entity)?;
-        let r2 = self.1.execute_filter(system, entity)?;
+    fn execute_filter<'s>(&self, world: &'s World, entity: Entity) -> Option<Self::Result<'s>> {
+        let r1 = self.0.execute_filter(world, entity)?;
+        let r2 = self.1.execute_filter(world, entity)?;
         Some((r1, r2))
     }
 }

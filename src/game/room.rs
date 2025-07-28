@@ -11,13 +11,14 @@ use tonic::Status;
 
 use crate::{
     game::{
+        action::Action,
         card::{CardId, InDeck, InHand},
         player::{CurrentTurn, PlayerId, PlayerState},
-        state::{Action, DebugLog, GameState, TurnTimer},
+        state::{DebugLog, GlobalState, TurnTimer},
         user::UserEvent,
     },
     grpc::{self, *},
-    system::{Query, System, exact, has},
+    system::{Query, World, exact, has},
 };
 
 #[derive(Atom)]
@@ -47,7 +48,7 @@ pub struct Room {
     p1_pending_event: Mutex<Option<RequestUserEvent>>,
 
     pub room_state: Atomic<RoomState>,
-    pub game: Mutex<System>,
+    pub game: Mutex<World>,
 }
 
 impl Room {
@@ -140,45 +141,48 @@ impl Room {
     }
 
     pub fn client_state(&self, player: PlayerId) -> grpc::GameState {
-        let system = self.game.lock();
+        let world = self.game.lock();
 
-        let debug_log = system
+        let debug_log = world
             .resource::<DebugLog>()
             .cloned()
             .unwrap_or_default()
             .entries;
 
-        let self_hand = system
+        let self_hand = world
             .query(exact(InHand(player)).and(has::<CardId>()))
             .map(|(e, (_, c))| grpc::HandCard {
                 card_id: c.0,
                 entity: e.id(),
             })
             .collect::<Vec<_>>();
-        let other_hand_count = system
+        let other_hand_count = world
             .query(exact(InHand(player.opp())).and(has::<CardId>()))
             .count() as u32;
-        let self_deck_count = system
+        let self_deck_count = world
             .query(exact(InDeck(player)).and(has::<CardId>()))
             .count() as u32;
-        let other_deck_count = system
+        let other_deck_count = world
             .query(exact(InDeck(player.opp())).and(has::<CardId>()))
             .count() as u32;
 
-        let round_number = system.resource::<GameState>().map(|s| s.round).unwrap_or(0);
+        let round_number = world
+            .resource::<GlobalState>()
+            .map(|s| s.round)
+            .unwrap_or(0);
 
-        let is_my_turn = system
+        let is_my_turn = world
             .query_one(exact(player).and(has::<CurrentTurn>()))
             .is_some();
-        let game_finished = system
-            .resource::<GameState>()
+        let game_finished = world
+            .resource::<GlobalState>()
             .map(|s| s.finished)
             .unwrap_or(false);
-        let self_faith_cards = system
+        let self_faith_cards = world
             .query_one(exact(player).and(has::<PlayerState>()))
             .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
             .unwrap_or_default();
-        let other_faith_cards = system
+        let other_faith_cards = world
             .query_one(exact(player.opp()).and(has::<PlayerState>()))
             .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
             .unwrap_or_default();
@@ -198,7 +202,7 @@ impl Room {
 }
 
 impl Room {
-    pub fn read<T>(&self, reader: impl FnOnce(&System) -> T) -> T {
+    pub fn read<T>(&self, reader: impl FnOnce(&World) -> T) -> T {
         let game = self.game.lock();
         reader(&game)
     }
@@ -244,8 +248,8 @@ impl Room {
 
         let request = RequestUserEvent {
             seqnum: seqnum as u64,
-            timeout: self.read(|system| {
-                system
+            timeout: self.read(|world| {
+                world
                     .resource::<TurnTimer>()
                     .map(|s| s.0.remaining().as_millis() as i32)
                     .unwrap_or(0)
@@ -273,8 +277,8 @@ impl Room {
                     PlayerId::Player1 => this.p1_pending_event.lock(),
                 };
                 if let Some(req) = pending_event.as_mut() {
-                    req.timeout = this.read(|system| {
-                        system
+                    req.timeout = this.read(|world| {
+                        world
                             .resource::<TurnTimer>()
                             .map(|s| s.0.remaining().as_millis() as i32)
                             .unwrap_or(0)

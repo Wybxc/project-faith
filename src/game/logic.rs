@@ -3,13 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
-    game::{
-        card::{CardId, InDeck, InHand},
-        player::PlayerId,
-        room::Room,
-        state::*,
-        user::TurnAction,
-    },
+    game::{action::*, card::*, player::*, room::*, state::*, user::*},
     grpc::RequestTurnAction,
     system::{Entity, Query, exact, has},
 };
@@ -24,9 +18,9 @@ impl Room {
             self.turn(Player0).await?;
             self.turn(Player1).await?;
 
-            if self.read(|system| {
-                system.query(has::<InHand>()).count() == 0
-                    && system.query(has::<InDeck>()).count() == 0
+            if self.read(|world| {
+                world.query(has::<InHand>()).count() == 0
+                    && world.query(has::<InDeck>()).count() == 0
             }) {
                 break;
             }
@@ -43,14 +37,14 @@ impl Room {
         self.perform(TurnStart { player });
         self.perform(DrawCards { player, count: 1 });
 
-        while self.read(|system| {
-            system
+        while self.read(|world| {
+            world
                 .resource::<TurnTimer>()
                 .map(|timer| !timer.0.remaining().is_zero())
                 == Some(true)
         }) {
-            let playable_cards = self.read(|system| {
-                system
+            let playable_cards = self.read(|world| {
+                world
                     .query(has::<CardId>().and(exact(InHand(player))))
                     .map(|(e, _)| e.id())
                     .collect::<Vec<_>>()
@@ -63,7 +57,7 @@ impl Room {
                 TurnAction::PlayCard(play_card) => {
                     let card = Entity::from(play_card.entity);
                     self.perform(PlayCard { player, card });
-                    let Some(card_id) = self.read(|system| card.get::<CardId>(system).copied())
+                    let Some(card_id) = self.read(|world| card.get::<CardId>(world).copied())
                     else {
                         continue; // 如果获取卡牌 ID 失败，继续等待
                     };

@@ -1,7 +1,7 @@
 use crate::{
     game::card::{CardId, InDeck},
     impl_component,
-    system::{Entity, System},
+    system::{Entity, World},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,16 +31,11 @@ pub struct PlayerState {
 impl_component!(PlayerState);
 
 impl PlayerState {
-    pub fn new(
-        system: &mut System,
-        player: PlayerId,
-        deck: Vec<CardId>,
-        faith: Vec<CardId>,
-    ) -> Self {
+    pub fn new(world: &mut World, player: PlayerId, deck: Vec<CardId>, faith: Vec<CardId>) -> Self {
         let deck = deck
             .into_iter()
             .map(|card_id| {
-                system
+                world
                     .entity()
                     .component(card_id)
                     .component(InDeck(player))
