@@ -44,8 +44,8 @@ export interface GameState {
   readonly roundNumber: number;
   readonly isMyTurn: boolean;
   readonly gameFinished: boolean;
-  readonly selfFaithCards: readonly number[];
-  readonly otherFaithCards: readonly number[];
+  readonly selfFaith: readonly FaithCard[];
+  readonly otherFaith: readonly FaithCard[];
 }
 
 export interface RequestUserEvent {
@@ -71,6 +71,11 @@ export interface RequestTurnAction {
 }
 
 export interface HandCard {
+  readonly cardId: number;
+  readonly entity: number;
+}
+
+export interface FaithCard {
   readonly cardId: number;
   readonly entity: number;
 }
@@ -333,8 +338,8 @@ function createBaseGameState(): GameState {
     roundNumber: 0,
     isMyTurn: false,
     gameFinished: false,
-    selfFaithCards: [],
-    otherFaithCards: [],
+    selfFaith: [],
+    otherFaith: [],
   };
 }
 
@@ -364,16 +369,12 @@ export const GameState: MessageFns<GameState> = {
     if (message.gameFinished !== false) {
       writer.uint32(64).bool(message.gameFinished);
     }
-    writer.uint32(74).fork();
-    for (const v of message.selfFaithCards) {
-      writer.uint32(v);
+    for (const v of message.selfFaith) {
+      FaithCard.encode(v!, writer.uint32(74).fork()).join();
     }
-    writer.join();
-    writer.uint32(82).fork();
-    for (const v of message.otherFaithCards) {
-      writer.uint32(v);
+    for (const v of message.otherFaith) {
+      FaithCard.encode(v!, writer.uint32(82).fork()).join();
     }
-    writer.join();
     return writer;
   },
 
@@ -449,40 +450,20 @@ export const GameState: MessageFns<GameState> = {
           continue;
         }
         case 9: {
-          if (tag === 72) {
-            message.selfFaithCards.push(reader.uint32());
-
-            continue;
+          if (tag !== 74) {
+            break;
           }
 
-          if (tag === 74) {
-            const end2 = reader.uint32() + reader.pos;
-            while (reader.pos < end2) {
-              message.selfFaithCards.push(reader.uint32());
-            }
-
-            continue;
-          }
-
-          break;
+          message.selfFaith.push(FaithCard.decode(reader, reader.uint32()));
+          continue;
         }
         case 10: {
-          if (tag === 80) {
-            message.otherFaithCards.push(reader.uint32());
-
-            continue;
+          if (tag !== 82) {
+            break;
           }
 
-          if (tag === 82) {
-            const end2 = reader.uint32() + reader.pos;
-            while (reader.pos < end2) {
-              message.otherFaithCards.push(reader.uint32());
-            }
-
-            continue;
-          }
-
-          break;
+          message.otherFaith.push(FaithCard.decode(reader, reader.uint32()));
+          continue;
         }
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -506,8 +487,8 @@ export const GameState: MessageFns<GameState> = {
     message.roundNumber = object.roundNumber ?? 0;
     message.isMyTurn = object.isMyTurn ?? false;
     message.gameFinished = object.gameFinished ?? false;
-    message.selfFaithCards = object.selfFaithCards?.map((e) => e) || [];
-    message.otherFaithCards = object.otherFaithCards?.map((e) => e) || [];
+    message.selfFaith = object.selfFaith?.map((e) => FaithCard.fromPartial(e)) || [];
+    message.otherFaith = object.otherFaith?.map((e) => FaithCard.fromPartial(e)) || [];
     return message;
   },
 };
@@ -837,6 +818,64 @@ export const HandCard: MessageFns<HandCard> = {
   },
   fromPartial<I extends Exact<DeepPartial<HandCard>, I>>(object: I): HandCard {
     const message = createBaseHandCard() as any;
+    message.cardId = object.cardId ?? 0;
+    message.entity = object.entity ?? 0;
+    return message;
+  },
+};
+
+function createBaseFaithCard(): FaithCard {
+  return { cardId: 0, entity: 0 };
+}
+
+export const FaithCard: MessageFns<FaithCard> = {
+  encode(message: FaithCard, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cardId !== 0) {
+      writer.uint32(8).uint32(message.cardId);
+    }
+    if (message.entity !== 0) {
+      writer.uint32(16).uint32(message.entity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FaithCard {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFaithCard() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.cardId = reader.uint32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.entity = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<FaithCard>, I>>(base?: I): FaithCard {
+    return FaithCard.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FaithCard>, I>>(object: I): FaithCard {
+    const message = createBaseFaithCard() as any;
     message.cardId = object.cardId ?? 0;
     message.entity = object.entity ?? 0;
     return message;

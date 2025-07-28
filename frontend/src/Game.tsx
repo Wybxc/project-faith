@@ -18,7 +18,7 @@ import {
   RequestUserEvent,
   UserEvent,
 } from './generated/proto/game.v1';
-import cards from './assets/cards.json';
+import cards from './cards';
 
 const Game: Component<{
   api: GameV1Api;
@@ -33,8 +33,8 @@ const Game: Component<{
     roundNumber: 0,
     isMyTurn: false,
     gameFinished: false,
-    selfFaithCards: [],
-    otherFaithCards: [],
+    selfFaith: [],
+    otherFaith: [],
   });
   const [userEvent, setUserEvent] = createSignal<RequestUserEvent | null>(null);
 
@@ -128,12 +128,8 @@ const GameBoard: Component<{
           <tr>
             <Td>对方信念牌</Td>
             <Td>
-              <For each={props.state.otherFaithCards}>
-                {(card) => (
-                  <span class={css({ margin: '0 0.5rem' })}>
-                    <Card cardId={card.toString()} />
-                  </span>
-                )}
+              <For each={props.state.otherFaith}>
+                {(card) => <Card cardId={card.cardId} entity={card.entity} />}
               </For>
             </Td>
           </tr>
@@ -145,23 +141,15 @@ const GameBoard: Component<{
             <Td>你的手牌</Td>
             <Td>
               <For each={props.state.selfHand}>
-                {(card) => (
-                  <div>
-                    {card.entity}: <Card cardId={card.cardId.toString()} />
-                  </div>
-                )}
+                {(card) => <Card cardId={card.cardId} entity={card.entity} />}
               </For>
             </Td>
           </tr>
           <tr>
             <Td>你的信念牌</Td>
             <Td>
-              <For each={props.state.selfFaithCards}>
-                {(card) => (
-                  <span class={css({ margin: '0 0.5rem' })}>
-                    <Card cardId={card.toString()} />
-                  </span>
-                )}
+              <For each={props.state.selfFaith}>
+                {(card) => <Card cardId={card.cardId} entity={card.entity} />}
               </For>
             </Td>
           </tr>
@@ -189,13 +177,14 @@ const GameBoard: Component<{
 };
 
 const Card: Component<{
-  cardId: string;
+  cardId: number;
+  entity: number;
 }> = (props) => {
-  const card = createMemo(() => cards[props.cardId as keyof typeof cards]);
+  const card = createMemo(() => cards[props.cardId]);
   return (
-    <span title={card()?.description ?? '未知牌'}>
-      {card()?.name ?? '未知牌'}
-    </span>
+    <p title={card()?.description ?? '未知牌'}>
+      {props.entity}：{card()?.name ?? '未知牌'}
+    </p>
   );
 };
 

@@ -38,8 +38,8 @@ message GameState {
   uint32 round_number = 6;
   bool is_my_turn = 7;
   bool game_finished = 8;
-  repeated uint32 self_faith_cards = 9;
-  repeated uint32 other_faith_cards = 10;
+  repeated FaithCard self_faith = 9;
+  repeated FaithCard other_faith = 10;
 }
 
 message RequestUserEvent {
@@ -66,6 +66,11 @@ message RequestTurnAction {
 }
 
 message HandCard {
+  uint32 card_id = 1;
+  uint32 entity = 2;
+}
+
+message FaithCard {
   uint32 card_id = 1;
   uint32 entity = 2;
 }

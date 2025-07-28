@@ -1,5 +1,5 @@
 use crate::{
-    game::card::{CardId, InDeck},
+    game::card::{CardId, Faith, InDeck},
     impl_component,
     system::{Entity, World},
 };
@@ -25,8 +25,6 @@ impl PlayerId {
 pub struct PlayerState {
     /// 玩家卡组实体列表
     pub deck: Vec<Entity>,
-    /// Faith cards
-    pub faith: Vec<CardId>,
 }
 impl_component!(PlayerState);
 
@@ -42,7 +40,14 @@ impl PlayerState {
                     .spawn()
             })
             .collect();
-        Self { deck, faith }
+        for card_id in faith {
+            world
+                .entity()
+                .component(card_id)
+                .component(Faith(player))
+                .spawn();
+        }
+        Self { deck }
     }
 }
 

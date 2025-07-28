@@ -15,3 +15,8 @@ impl_component!(InHand);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InDeck(pub PlayerId);
 impl_component!(InDeck);
+
+/// 卡牌位于玩家信念区
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Faith(pub PlayerId);
+impl_component!(Faith);

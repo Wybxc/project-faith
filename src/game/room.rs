@@ -12,8 +12,8 @@ use tonic::Status;
 use crate::{
     game::{
         action::Action,
-        card::{CardId, InDeck, InHand},
-        player::{CurrentTurn, PlayerId, PlayerState},
+        card::{CardId, Faith, InDeck, InHand},
+        player::{CurrentTurn, PlayerId},
         state::{DebugLog, GlobalState, TurnTimer},
         user::UserEvent,
     },
@@ -178,14 +178,21 @@ impl Room {
             .resource::<GlobalState>()
             .map(|s| s.finished)
             .unwrap_or(false);
-        let self_faith_cards = world
-            .query_one(exact(player).and(has::<PlayerState>()))
-            .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
-            .unwrap_or_default();
-        let other_faith_cards = world
-            .query_one(exact(player.opp()).and(has::<PlayerState>()))
-            .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
-            .unwrap_or_default();
+        
+        let self_faith = world
+            .query(exact(Faith(player)).and(has::<CardId>()))
+            .map(|(e, (_, c))| grpc::FaithCard {
+                card_id: c.0,
+                entity: e.id(),
+            })
+            .collect::<Vec<_>>();
+        let other_faith = world
+            .query(exact(Faith(player.opp())).and(has::<CardId>()))
+            .map(|(e, (_, c))| grpc::FaithCard {
+                card_id: c.0,
+                entity: e.id(),
+            })
+            .collect::<Vec<_>>();
         grpc::GameState {
             debug_log,
             self_hand,
@@ -195,8 +202,8 @@ impl Room {
             round_number,
             is_my_turn,
             game_finished,
-            self_faith_cards,
-            other_faith_cards,
+            self_faith,
+            other_faith,
         }
     }
 }
