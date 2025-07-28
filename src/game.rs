@@ -18,6 +18,7 @@ use crate::{
 
 mod card;
 mod logic;
+mod player;
 mod room;
 mod state;
 mod user;

@@ -11,11 +11,13 @@ use tonic::Status;
 
 use crate::{
     game::{
-        state::{Action, GameState, PlayerId, TurnTimer},
+        card::{CardId, InDeck, InHand},
+        player::{CurrentTurn, PlayerId, PlayerState},
+        state::{Action, DebugLog, GameState, TurnTimer},
         user::UserEvent,
     },
-    grpc::*,
-    system::System,
+    grpc::{self, *},
+    system::{Query, System, exact, has},
 };
 
 #[derive(Atom)]
@@ -136,6 +138,63 @@ impl Room {
         let _ = ch.send(event_type);
         Ok(())
     }
+
+    pub fn client_state(&self, player: PlayerId) -> grpc::GameState {
+        let system = self.game.lock();
+
+        let debug_log = system
+            .resource::<DebugLog>()
+            .cloned()
+            .unwrap_or_default()
+            .entries;
+
+        let self_hand = system
+            .query(exact(InHand(player)).and(has::<CardId>()))
+            .map(|(e, (_, c))| grpc::HandCard {
+                card_id: c.0,
+                entity: e.id(),
+            })
+            .collect::<Vec<_>>();
+        let other_hand_count = system
+            .query(exact(InHand(player.opp())).and(has::<CardId>()))
+            .count() as u32;
+        let self_deck_count = system
+            .query(exact(InDeck(player)).and(has::<CardId>()))
+            .count() as u32;
+        let other_deck_count = system
+            .query(exact(InDeck(player.opp())).and(has::<CardId>()))
+            .count() as u32;
+
+        let round_number = system.resource::<GameState>().map(|s| s.round).unwrap_or(0);
+
+        let is_my_turn = system
+            .query_one(exact(player).and(has::<CurrentTurn>()))
+            .is_some();
+        let game_finished = system
+            .resource::<GameState>()
+            .map(|s| s.finished)
+            .unwrap_or(false);
+        let self_faith_cards = system
+            .query_one(exact(player).and(has::<PlayerState>()))
+            .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
+            .unwrap_or_default();
+        let other_faith_cards = system
+            .query_one(exact(player.opp()).and(has::<PlayerState>()))
+            .map(|(_, (_, s))| s.faith.iter().map(|c| c.0).collect())
+            .unwrap_or_default();
+        grpc::GameState {
+            debug_log,
+            self_hand,
+            other_hand_count,
+            self_deck_count,
+            other_deck_count,
+            round_number,
+            is_my_turn,
+            game_finished,
+            self_faith_cards,
+            other_faith_cards,
+        }
+    }
 }
 
 impl Room {
@@ -145,20 +204,16 @@ impl Room {
     }
 
     pub fn sync_game_state(&self) {
-        // Send the current game state to the player
-        let game = self.game.lock();
-        if let Some(game_state) = game.resource::<GameState>() {
-            let _ = self.p0_sender.send(GameEvent {
-                event_type: Some(game_event::EventType::StateUpdate(
-                    game_state.to_client(PlayerId::Player0, &game),
-                )),
-            });
-            let _ = self.p1_sender.send(GameEvent {
-                event_type: Some(game_event::EventType::StateUpdate(
-                    game_state.to_client(PlayerId::Player1, &game),
-                )),
-            });
-        }
+        let _ = self.p0_sender.send(GameEvent {
+            event_type: Some(game_event::EventType::StateUpdate(
+                self.client_state(PlayerId::Player0),
+            )),
+        });
+        let _ = self.p1_sender.send(GameEvent {
+            event_type: Some(game_event::EventType::StateUpdate(
+                self.client_state(PlayerId::Player1),
+            )),
+        });
     }
 
     pub fn perform<A: Action>(&self, action: A) -> A::Output {

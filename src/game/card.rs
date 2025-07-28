@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::{
-    game::state::{Action, DrawCards, PlayerId},
+    game::{player::PlayerId, state::{Action, DrawCards}},
     impl_component,
     system::System,
     utils::Map,

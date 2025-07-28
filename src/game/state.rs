@@ -1,148 +1,31 @@
 use std::{time::Duration, vec};
 
 use crate::{
-    game::card::{CardDef, CardId, InDeck, InHand, REGISTRY},
-    grpc::{self},
-    system::{Entity, Query, System, exact, has},
+    game::{
+        card::{CardDef, CardId, InDeck, InHand, REGISTRY},
+        player::{CurrentTurn, PlayerId, PlayerState},
+    },
+    system::{Entity, System, exact},
     utils::Timer,
 };
 
 /// 游戏状态
 ///
 /// 可变性限制：public API 只允许通过 `Action` trait 来修改状态，确保状态变更的可控性。
-#[derive(Default)]
 pub struct GameState {
-    players: (PlayerState, PlayerState),
-
     /// The current round number.
-    round: u32,
+    pub round: u32,
 
     /// Indicates if the game is finished.
-    finished: bool,
-
-    /// Current player's turn.
-    current_turn: PlayerId,
+    pub finished: bool,
 }
 
 impl GameState {
     pub fn new() -> Self {
-        Default::default()
-    }
-
-    fn initialize(
-        &mut self,
-        system: &mut System,
-        player0_deck: Vec<CardId>,
-        player1_deck: Vec<CardId>,
-        player0_faith: Vec<CardId>,
-        player1_faith: Vec<CardId>,
-    ) {
-        self.players
-            .0
-            .initialize(system, player0_deck, PlayerId::Player0, player0_faith);
-        self.players
-            .1
-            .initialize(system, player1_deck, PlayerId::Player1, player1_faith);
-        self.round = 0;
-        self.finished = false;
-        self.current_turn = PlayerId::Player0;
-    }
-
-    pub fn me(&self, player: PlayerId) -> &PlayerState {
-        match player {
-            PlayerId::Player0 => &self.players.0,
-            PlayerId::Player1 => &self.players.1,
+        Self {
+            round: 0,
+            finished: false,
         }
-    }
-
-    fn me_mut(&mut self, player: PlayerId) -> &mut PlayerState {
-        match player {
-            PlayerId::Player0 => &mut self.players.0,
-            PlayerId::Player1 => &mut self.players.1,
-        }
-    }
-
-    pub fn to_client(&self, player: PlayerId, system: &System) -> grpc::GameState {
-        let debug_log = system
-            .resource::<DebugLog>()
-            .cloned()
-            .unwrap_or_default()
-            .entries;
-        let self_hand = system
-            .query(has::<CardId>().and(exact(InHand(player))))
-            .map(|(e, (c, _))| grpc::HandCard {
-                card_id: c.0,
-                entity: e.id(),
-            })
-            .collect::<Vec<_>>();
-        let other_hand_count = system
-            .query(has::<CardId>().and(exact(InHand(player.opp()))))
-            .count() as u32;
-        let self_deck_count = self.me(player).deck.len() as u32;
-        let other_deck_count = self.me(player.opp()).deck.len() as u32;
-        let round_number = self.round;
-        let is_my_turn = self.current_turn == player;
-        let game_finished = self.finished;
-        let self_faith_cards = self.me(player).faith.iter().map(|id| id.0).collect();
-        let other_faith_cards = self.me(player.opp()).faith.iter().map(|id| id.0).collect();
-        grpc::GameState {
-            debug_log,
-            self_hand,
-            other_hand_count,
-            self_deck_count,
-            other_deck_count,
-            round_number,
-            is_my_turn,
-            game_finished,
-            self_faith_cards,
-            other_faith_cards,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PlayerId {
-    #[default]
-    Player0 = 0,
-    Player1 = 1,
-}
-
-impl PlayerId {
-    /// Returns the opposite player ID.
-    pub fn opp(self) -> PlayerId {
-        match self {
-            PlayerId::Player0 => PlayerId::Player1,
-            PlayerId::Player1 => PlayerId::Player0,
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct PlayerState {
-    /// 玩家卡组实体列表
-    pub deck: Vec<Entity>,
-    /// Faith cards
-    pub faith: Vec<CardId>,
-}
-
-impl PlayerState {
-    pub fn initialize(
-        &mut self,
-        system: &mut System,
-        deck: Vec<CardId>,
-        player: PlayerId,
-        faith_cards: Vec<CardId>,
-    ) {
-        // 初始化时 system 为空，不需要删除旧卡牌
-        for card_id in deck {
-            let entity = system
-                .entity()
-                .component(card_id)
-                .component(InDeck(player))
-                .spawn();
-            self.deck.push(entity);
-        }
-        self.faith = faith_cards;
     }
 }
 
@@ -172,15 +55,32 @@ impl Action for Initalize {
     type Output = ();
 
     fn perform(&self, system: &mut System) {
-        let mut game_state = GameState::new();
-        game_state.initialize(
-            system,
-            vec![CardId(7001); 30], // Player 0's deck
-            vec![CardId(7002); 30], // Player 1's deck
-            vec![CardId(8001); 3],  // Player 0's faith
-            vec![CardId(8001); 3],  // Player 1's faith
-        );
-        system.add_resource(game_state);
+        system.add_resource(GameState::new());
+
+        system
+            .entity()
+            .component(PlayerId::Player0)
+            .component_with(|system| {
+                PlayerState::new(
+                    system,
+                    PlayerId::Player0,
+                    vec![CardId(7001); 30],
+                    vec![CardId(8001); 3],
+                )
+            })
+            .spawn();
+        system
+            .entity()
+            .component(PlayerId::Player1)
+            .component_with(|system| {
+                PlayerState::new(
+                    system,
+                    PlayerId::Player1,
+                    vec![CardId(7002); 30],
+                    vec![CardId(8001); 3],
+                )
+            })
+            .spawn();
 
         system.resource_or_default::<DebugLog>().push("游戏开始。");
     }
@@ -195,8 +95,8 @@ impl Action for TurnStart {
     type Output = ();
 
     fn perform(&self, system: &mut System) {
-        let gs = system.resource_mut::<GameState>().unwrap();
-        gs.current_turn = self.player;
+        let (player, _) = system.query(exact(self.player)).next().unwrap();
+        player.add(system, CurrentTurn);
 
         system.add_resource(TurnTimer(Timer::new(Duration::from_secs(30))));
 
@@ -219,8 +119,8 @@ impl Action for DrawCards {
     fn perform(&self, system: &mut System) -> Self::Output {
         let mut drawn_cards = Vec::new();
         for _ in 0..self.count {
-            let gs = system.resource_mut::<GameState>().unwrap();
-            let player_state = gs.me_mut(self.player);
+            let (player, _) = system.query(exact(self.player)).next().unwrap();
+            let player_state = player.get_mut::<PlayerState>(system).unwrap();
             if let Some(card) = player_state.deck.pop() {
                 card.remove::<InDeck>(system);
                 let _ = card.add(system, InHand(self.player));
@@ -291,6 +191,9 @@ impl Action for EndTurn {
     type Output = ();
 
     fn perform(&self, system: &mut System) {
+        let (player, _) = system.query(exact(self.player)).next().unwrap();
+        player.remove::<CurrentTurn>(system);
+
         system.remove_resource::<TurnTimer>();
 
         system

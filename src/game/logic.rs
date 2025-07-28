@@ -4,7 +4,8 @@ use anyhow::Result;
 
 use crate::{
     game::{
-        card::{CardId, InHand},
+        card::{CardId, InDeck, InHand},
+        player::PlayerId,
         room::Room,
         state::*,
         user::TurnAction,
@@ -24,8 +25,8 @@ impl Room {
             self.turn(Player1).await?;
 
             if self.read(|system| {
-                let gs = system.resource::<GameState>().unwrap();
-                gs.me(Player0).deck.is_empty() && gs.me(Player1).deck.is_empty()
+                system.query(has::<InHand>()).count() == 0
+                    && system.query(has::<InDeck>()).count() == 0
             }) {
                 break;
             }

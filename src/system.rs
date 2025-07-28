@@ -139,7 +139,8 @@ impl System {
     }
 
     pub fn add_resource<R: Any + Send + Sync>(&mut self, resource: R) -> Option<R> {
-        self.resources.insert(TypeId::of::<R>(), Box::new(resource))
+        self.resources
+            .insert(TypeId::of::<R>(), Box::new(resource))
             .and_then(|r| r.downcast::<R>().ok())
             .map(|r| *r)
     }
@@ -174,6 +175,12 @@ impl System {
         }
     }
 
+    pub fn has_component<C: Component>(&self, entity: Entity) -> bool {
+        self.storage::<C>()
+            .map(|storage| storage.has(entity))
+            .unwrap_or(false)
+    }
+
     pub fn get_component<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.storage::<C>()?.get(entity)
     }
@@ -188,6 +195,10 @@ impl System {
     ) -> impl Iterator<Item = (Entity, Q::Result<'a>)> + 'a {
         query.execute_query(self)
     }
+
+    pub fn query_one<'a, Q: Query + 'a>(&'a self, query: Q) -> Option<(Entity, Q::Result<'a>)> {
+        query.execute_query(self).next()
+    }
 }
 
 impl Entity {
@@ -199,6 +210,10 @@ impl Entity {
         system.remove_component::<C>(self)
     }
 
+    pub fn has<C: Component>(self, system: &System) -> bool {
+        system.has_component::<C>(self)
+    }
+
     pub fn get<C: Component>(self, system: &System) -> Option<&C> {
         system.get_component(self)
     }
@@ -208,6 +223,7 @@ impl Entity {
     }
 }
 
+#[must_use]
 pub struct EntityBuilder<'a> {
     system: &'a mut System,
     entity: Entity,
@@ -220,6 +236,11 @@ impl<'a> EntityBuilder<'a> {
             panic!("Component already exists for this entity");
         }
         self
+    }
+
+    pub fn component_with<C: Component>(self, builder: impl FnOnce(&mut System) -> C) -> Self {
+        let component = builder(self.system);
+        self.component(component)
     }
 
     pub fn spawn(self) -> Entity {
