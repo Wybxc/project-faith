@@ -63,11 +63,11 @@ impl Action for Initalize {
 }
 
 /// 回合开始
-pub struct TurnStart {
+pub struct StartTurn {
     pub player: PlayerId,
 }
 
-impl Action for TurnStart {
+impl Action for StartTurn {
     type Output = ();
 
     fn perform(&self, world: &mut World) {

@@ -34,7 +34,7 @@ impl Room {
     }
 
     async fn turn(self: &Arc<Self>, player: PlayerId) -> Result<()> {
-        self.perform(TurnStart { player });
+        self.perform(StartTurn { player });
         self.perform(DrawCards { player, count: 1 });
 
         while self.read(|world| {
@@ -56,20 +56,18 @@ impl Room {
             match action {
                 TurnAction::PlayCard(play_card) => {
                     let card = Entity::from(play_card.entity);
-                    self.perform(PlayCard { player, card });
                     let Some(card_id) = self.read(|world| card.get::<CardId>(world).copied())
                     else {
                         continue; // 如果获取卡牌 ID 失败，继续等待
                     };
+                    self.perform(PlayCard { player, card });
                     self.perform(ExecuteCard { player, card_id });
                 }
-                TurnAction::EndTurn(_) => {
-                    self.perform(EndTurn { player });
-                    break;
-                }
+                TurnAction::EndTurn(_) => break,
             }
         }
 
+        self.perform(EndTurn { player });
         Ok(())
     }
 }
