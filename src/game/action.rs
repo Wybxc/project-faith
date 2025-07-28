@@ -1,11 +1,9 @@
 use std::time::Duration;
 
 use crate::{
+    card::REGISTRY,
     game::{
-        card::{
-            CardId, InDeck, InHand,
-            prototype::{Prototype, REGISTRY},
-        },
+        card::{CardId, InDeck, InHand, Prototype},
         player::{CurrentTurn, PlayerId, PlayerState},
         state::{DebugLog, GlobalState, TurnTimer},
     },

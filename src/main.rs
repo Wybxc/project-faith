@@ -8,6 +8,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::grpc::*;
 
 mod auth;
+mod card;
 mod game;
 mod system;
 mod utils;
@@ -15,6 +16,7 @@ mod utils;
 mod grpc {
     tonic::include_proto!("auth.v1");
     tonic::include_proto!("game.v1");
+    tonic::include_proto!("card.v1");
 }
 
 #[tokio::main]
@@ -59,6 +61,7 @@ async fn main() {
         .add_service(game_service_server::GameServiceServer::new(
             game::Game::default(),
         ))
+        .add_service(card_service_server::CardServiceServer::new(card::Card))
         .serve("[::1]:8617".parse().unwrap());
 
     tracing::info!("gRPC server listening on [::1]:8617");

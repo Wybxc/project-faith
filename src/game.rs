@@ -17,7 +17,7 @@ use crate::{
 };
 
 mod action;
-mod card;
+pub mod card;
 mod logic;
 mod player;
 mod room;

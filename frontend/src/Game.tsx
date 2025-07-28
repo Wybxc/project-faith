@@ -1,6 +1,7 @@
 import {
   type Component,
   createMemo,
+  createResource,
   createSignal,
   For,
   JSXElement,
@@ -18,7 +19,7 @@ import {
   RequestUserEvent,
   UserEvent,
 } from './generated/proto/game.v1';
-import cards from './cards';
+import { CardV1Api } from './api/card';
 
 const Game: Component<{
   api: GameV1Api;
@@ -176,11 +177,16 @@ const GameBoard: Component<{
   );
 };
 
+const [cards] = createResource(async () => {
+  const api = new CardV1Api();
+  return await api.getCardPrototypes();
+});
+
 const Card: Component<{
   cardId: number;
   entity: number;
 }> = (props) => {
-  const card = createMemo(() => cards[props.cardId]);
+  const card = createMemo(() => cards()?.[props.cardId]);
   return (
     <p title={card()?.description ?? '未知牌'}>
       {props.entity}：{card()?.name ?? '未知牌'}

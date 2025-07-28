@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package card.v1;
+
+service CardService {
+    rpc GetCardPrototypes(GetCardPrototypesRequest) returns (GetCardPrototypesResponse);
+}
+
+message GetCardPrototypesRequest {}
+
+message GetCardPrototypesResponse {
+    map<uint32, CardPrototype> prototypes = 1;
+}
+
+message CardPrototype {
+    string name = 1;
+    string description = 2;
+}

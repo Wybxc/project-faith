@@ -12,4 +12,5 @@ protoc \
   --ts_proto_opt=outputJsonMethods=false \
   -I ../proto \
   ../proto/auth.v1.proto \
-  ../proto/game.v1.proto
+  ../proto/game.v1.proto \
+  ../proto/card.v1.proto
