@@ -12,8 +12,6 @@ use crate::{
 /// 可变性限制：public API 只允许通过 `Action` trait 来修改状态，确保状态变更的可控性。
 #[derive(Default)]
 pub struct GameState {
-    system: System,
-
     players: (PlayerState, PlayerState),
 
     /// The current round number.
@@ -39,23 +37,18 @@ impl GameState {
 
     fn initialize(
         &mut self,
+        system: &mut System,
         player0_deck: Vec<CardId>,
         player1_deck: Vec<CardId>,
         player0_faith: Vec<CardId>,
         player1_faith: Vec<CardId>,
     ) {
-        self.players.0.initialize(
-            &mut self.system,
-            player0_deck,
-            PlayerId::Player0,
-            player0_faith,
-        );
-        self.players.1.initialize(
-            &mut self.system,
-            player1_deck,
-            PlayerId::Player1,
-            player1_faith,
-        );
+        self.players
+            .0
+            .initialize(system, player0_deck, PlayerId::Player0, player0_faith);
+        self.players
+            .1
+            .initialize(system, player1_deck, PlayerId::Player1, player1_faith);
         self.round = 0;
         self.finished = false;
         self.current_turn = PlayerId::Player0;
@@ -76,26 +69,20 @@ impl GameState {
         }
     }
 
-    pub fn system(&self) -> &System {
-        &self.system
-    }
-
     pub fn turn_time_remaining(&self) -> Duration {
         self.turn_timer.remaining()
     }
 
-    pub fn to_client(&self, player: PlayerId) -> grpc::GameState {
+    pub fn to_client(&self, player: PlayerId, system: &System) -> grpc::GameState {
         let debug_log = self.debug_log.clone();
-        let self_hand = self
-            .system()
+        let self_hand = system
             .query(has::<CardId>().and(exact(InHand(player))))
             .map(|(e, (c, _))| grpc::HandCard {
                 card_id: c.0,
                 entity: e.id(),
             })
             .collect::<Vec<_>>();
-        let other_hand_count = self
-            .system()
+        let other_hand_count = system
             .query(has::<CardId>().and(exact(InHand(player.opp()))))
             .count() as u32;
         let self_deck_count = self.me(player).deck.len() as u32;
@@ -120,8 +107,8 @@ impl GameState {
     }
 
     /// Performs an action on the game state.
-    pub fn perform<A: Action>(&mut self, action: A) -> A::Output {
-        let output = action.perform(self);
+    pub fn perform<A: Action>(&mut self, system: &mut System, action: A) -> A::Output {
+        let output = action.perform(self, system);
         self.debug_log.push(action.debug_log());
         output
     }
@@ -176,7 +163,7 @@ impl PlayerState {
 pub trait Action {
     type Output;
 
-    fn perform(&self, game_state: &mut GameState) -> Self::Output;
+    fn perform(&self, game_state: &mut GameState, system: &mut System) -> Self::Output;
     fn debug_log(&self) -> String;
 }
 
@@ -186,8 +173,9 @@ pub struct Initalize;
 impl Action for Initalize {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, system: &mut System) {
         game_state.initialize(
+            system,
             vec![CardId(7001); 30], // Player 0's deck
             vec![CardId(7002); 30], // Player 1's deck
             vec![CardId(8001); 3],  // Player 0's faith
@@ -208,7 +196,7 @@ pub struct TurnStart {
 impl Action for TurnStart {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
         game_state.current_turn = self.player;
         game_state.turn_timer.reset(Duration::from_secs(30));
         game_state.turn_timer.start();
@@ -228,16 +216,15 @@ pub struct DrawCards {
 impl Action for DrawCards {
     type Output = Vec<Entity>;
 
-    fn perform(&self, game_state: &mut GameState) -> Self::Output {
+    fn perform(&self, game_state: &mut GameState, system: &mut System) -> Self::Output {
         let player_state = game_state.me_mut(self.player);
         let mut drawn_cards = Vec::new();
         for _ in 0..self.count {
             if let Some(card) = player_state.deck.pop() {
+                card.remove::<InDeck>(system);
+                let _ = card.add(system, InHand(self.player));
                 drawn_cards.push(card);
             }
-        }
-        for &card in &drawn_cards {
-            let _ = game_state.system.add_component(card, InHand(self.player));
         }
         drawn_cards
     }
@@ -256,8 +243,8 @@ pub struct PlayCard {
 impl Action for PlayCard {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) -> Self::Output {
-        game_state.system.remove_component::<InHand>(self.card);
+    fn perform(&self, _game_state: &mut GameState, system: &mut System) -> Self::Output {
+        self.card.remove::<InHand>(system);
     }
 
     fn debug_log(&self) -> String {
@@ -274,14 +261,14 @@ pub struct ExecuteCard {
 impl Action for ExecuteCard {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, system: &mut System) {
         let Some(card) = REGISTRY.cards.get(&self.card_id) else {
             return; // 卡牌不存在
         };
         match card {
             CardDef::Order(order_card) => {
                 for skill in &order_card.skills {
-                    skill(game_state, self.player);
+                    skill(game_state, system, self.player);
                 }
             }
             CardDef::Faith(_) => {}
@@ -303,7 +290,7 @@ pub struct EndTurn {
 impl Action for EndTurn {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
         game_state.turn_timer.pause();
     }
 
@@ -318,7 +305,7 @@ pub struct BumpRound;
 impl Action for BumpRound {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
         game_state.round += 1;
     }
 
@@ -333,7 +320,7 @@ pub struct GameFinished;
 impl Action for GameFinished {
     type Output = ();
 
-    fn perform(&self, game_state: &mut GameState) {
+    fn perform(&self, game_state: &mut GameState, _system: &mut System) {
         game_state.finished = true;
     }
 

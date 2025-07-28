@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 use crate::{
     game::state::{DrawCards, GameState, PlayerId},
     impl_component,
+    system::System,
     utils::Map,
 };
 
@@ -20,7 +21,7 @@ impl_component!(InHand);
 pub struct InDeck(pub PlayerId);
 impl_component!(InDeck);
 
-pub type Skill = Box<dyn Fn(&mut GameState, PlayerId) + Send + Sync>;
+pub type Skill = Box<dyn Fn(&mut GameState, &mut System, PlayerId) + Send + Sync>;
 
 pub enum CardDef {
     Order(OrderCardDef),
@@ -108,8 +109,8 @@ impl<'a> FaithBuilder<'a> {
 }
 
 fn draw_cards(count: usize) -> Skill {
-    Box::new(move |game_state: &mut GameState, player: PlayerId| {
-        game_state.perform(DrawCards { player, count });
+    Box::new(move |game_state, system, player| {
+        game_state.perform(system, DrawCards { player, count });
     })
 }
 
