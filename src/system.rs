@@ -142,6 +142,10 @@ impl System {
         self.storage::<C>()?.get(entity)
     }
 
+    pub fn get_component_mut<C: Component>(&mut self, entity: Entity) -> Option<&mut C> {
+        self.storage_mut::<C>().get_mut(entity)
+    }
+
     pub fn query<'a, Q: Query + 'a>(
         &'a self,
         query: Q,
@@ -151,8 +155,20 @@ impl System {
 }
 
 impl Entity {
+    pub fn add<C: Component>(self, system: &mut System, component: C) -> Result<(), C> {
+        system.add_component(self, component)
+    }
+
+    pub fn remove<C: Component>(self, system: &mut System) -> Option<C> {
+        system.remove_component::<C>(self)
+    }
+
     pub fn get<C: Component>(self, system: &System) -> Option<&C> {
         system.get_component(self)
+    }
+
+    pub fn get_mut<C: Component>(self, system: &mut System) -> Option<&mut C> {
+        system.get_component_mut(self)
     }
 }
 

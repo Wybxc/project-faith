@@ -1,7 +1,7 @@
 use std::{time::Duration, vec};
 
 use crate::{
-    game::card::{CardDef, CardId, InHand, REGISTRY},
+    game::card::{CardDef, CardId, InDeck, InHand, REGISTRY},
     grpc::{self},
     system::{Entity, Query, System, exact, has},
     utils::Timer,
@@ -44,12 +44,18 @@ impl GameState {
         player0_faith: Vec<CardId>,
         player1_faith: Vec<CardId>,
     ) {
-        self.players
-            .0
-            .initialize(&mut self.system, player0_deck, player0_faith);
-        self.players
-            .1
-            .initialize(&mut self.system, player1_deck, player1_faith);
+        self.players.0.initialize(
+            &mut self.system,
+            player0_deck,
+            PlayerId::Player0,
+            player0_faith,
+        );
+        self.players.1.initialize(
+            &mut self.system,
+            player1_deck,
+            PlayerId::Player1,
+            player1_faith,
+        );
         self.round = 0;
         self.finished = false;
         self.current_turn = PlayerId::Player0;
@@ -140,17 +146,27 @@ impl PlayerId {
 
 #[derive(Default)]
 pub struct PlayerState {
-    /// The player's deck of cards, from bottom to top.
+    /// 玩家卡组实体列表
     pub deck: Vec<Entity>,
     /// Faith cards
     pub faith: Vec<CardId>,
 }
 
 impl PlayerState {
-    pub fn initialize(&mut self, system: &mut System, deck: Vec<CardId>, faith_cards: Vec<CardId>) {
+    pub fn initialize(
+        &mut self,
+        system: &mut System,
+        deck: Vec<CardId>,
+        player: PlayerId,
+        faith_cards: Vec<CardId>,
+    ) {
         // 初始化时 system 为空，不需要删除旧卡牌
         for card_id in deck {
-            let entity = system.entity().component(card_id).spawn();
+            let entity = system
+                .entity()
+                .component(card_id)
+                .component(InDeck(player))
+                .spawn();
             self.deck.push(entity);
         }
         self.faith = faith_cards;

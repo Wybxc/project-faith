@@ -16,6 +16,10 @@ impl_component!(CardId);
 pub struct InHand(pub PlayerId);
 impl_component!(InHand);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InDeck(pub PlayerId);
+impl_component!(InDeck);
+
 pub type Skill = Box<dyn Fn(&mut GameState, PlayerId) + Send + Sync>;
 
 pub enum CardDef {
