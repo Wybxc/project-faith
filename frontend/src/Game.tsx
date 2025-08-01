@@ -15,6 +15,8 @@ import { createStore, reconcile } from 'solid-js/store';
 import { GameV1Api } from './api/game';
 import { css } from '../styled-system/css';
 import {
+  Cost,
+  CostProvider,
   GameState,
   RequestUserEvent,
   UserEvent,
@@ -230,14 +232,29 @@ const EventInput: Component<{
   return (
     <div>
       <p>剩余时间: {Math.floor(time() ?? 0)} 秒</p>
-      <Switch>
-        <Match when={props.userEvent.eventType?.$case === 'turnAction'}>
-          <TurnActionComponent
-            playableCards={props.userEvent.eventType!.value.playableCards}
-            onSubmit={props.onSubmit}
-          />
-        </Match>
-      </Switch>
+      <Show when={props.userEvent.eventType} keyed>
+        {(eventType) => (
+          <Switch>
+            <Match when={eventType.$case === 'turnAction' && eventType} keyed>
+              {(eventType) => (
+                <TurnActionComponent
+                  playableCards={eventType.value.playableCards}
+                  onSubmit={props.onSubmit}
+                />
+              )}
+            </Match>
+            <Match when={eventType.$case === 'costAction' && eventType} keyed>
+              {(eventType) => (
+                <CostActionComponent
+                  cost={eventType.value.cost ?? { any: 1 }}
+                  providers={eventType.value.providers}
+                  onSubmit={props.onSubmit}
+                />
+              )}
+            </Match>
+          </Switch>
+        )}
+      </Show>
     </div>
   );
 };
@@ -266,15 +283,8 @@ const TurnActionComponent: Component<{
           </label>
         )}
       </For>
-      <button
-        class={css({
-          padding: '0.5rem 1rem',
-          backgroundColor: '#007bff',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        })}
+
+      <Button
         onClick={() => {
           const entity = card();
           if (entity !== null) {
@@ -286,22 +296,101 @@ const TurnActionComponent: Component<{
         }}
       >
         Play Card
-      </button>
-
-      <button
-        class={css({
-          padding: '0.5rem 1rem',
-          backgroundColor: '#6c757d',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        })}
+      </Button>
+      <Button
+        variant="secondary"
         onClick={() => props.onSubmit({ $case: 'endTurn', value: {} })}
       >
         End Turn
-      </button>
+      </Button>
     </div>
+  );
+};
+
+const CostActionComponent: Component<{
+  cost: Cost;
+  providers: readonly CostProvider[];
+  onSubmit: (event: UserEvent['eventType']) => void;
+}> = (props) => {
+  const [selectedProviders, setSelectedProviders] = createSignal<Set<number>>(
+    new Set()
+  );
+
+  return (
+    <div>
+      <p>请选择支付方式:</p>
+      <For each={props.providers}>
+        {(provider) => (
+          <label class={css({ display: 'block', margin: '0.5rem 0' })}>
+            <input
+              type="checkbox"
+              name="cost-provider"
+              value={provider.entity}
+              class={css({ marginRight: '0.5rem' })}
+              onChange={(e) =>
+                setSelectedProviders((prev) => {
+                  const newSet = new Set(prev);
+                  if (e.currentTarget.checked) {
+                    newSet.add(parseInt(e.currentTarget.value, 10));
+                  } else {
+                    newSet.delete(parseInt(e.currentTarget.value, 10));
+                  }
+                  return newSet;
+                })
+              }
+            />
+            <span>{provider.entity}</span>
+          </label>
+        )}
+      </For>
+
+      <Button
+        onClick={() => {
+          const providers = Array.from(selectedProviders());
+          const provided = providers.reduce(
+            (acc, entity) => {
+              const provider = props.providers.find((p) => p.entity === entity);
+              if (provider) {
+                acc.any += provider.provided?.any ?? 0;
+              }
+              return acc;
+            },
+            { any: 0 }
+          );
+          if (provided.any == props.cost.any) {
+            return;
+          }
+          props.onSubmit({
+            $case: 'payCost',
+            value: { providers: providers },
+          });
+        }}
+      >
+        Pay Cost
+      </Button>
+    </div>
+  );
+};
+
+const Button: Component<{
+  variant?: 'primary' | 'secondary';
+  onClick: () => void;
+  children: JSXElement;
+}> = (props) => {
+  return (
+    <button
+      class={css({
+        padding: '0.5rem 1rem',
+        backgroundColor: props.variant === 'secondary' ? '#6c757d' : '#007bff',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+      })}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   );
 };
 

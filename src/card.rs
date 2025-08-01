@@ -41,6 +41,7 @@ pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
             .card_id(CardId(7001))
             .name("测试卡7001")
             .description("抽一张牌。")
+            .cost(0)
             .skill(draw_cards(1))
             .build()
     });
@@ -49,6 +50,7 @@ pub static REGISTRY: LazyLock<Registry> = LazyLock::new(|| {
             .card_id(CardId(7002))
             .name("测试卡7002")
             .description("抽两张牌。")
+            .cost(1)
             .skill(draw_cards(2))
             .build()
     });

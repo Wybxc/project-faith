@@ -47,6 +47,7 @@ message RequestUserEvent {
   int32 timeout = 2;
   oneof event_type {
     RequestTurnAction turn_action = 3;
+    RequestCostAction cost_action = 4;
   }
 }
 
@@ -56,6 +57,7 @@ message UserEvent {
   oneof event_type {
     PlayCard play_card = 3;
     EndTurn end_turn = 4;
+    PayCost pay_cost = 5;
   }
 }
 
@@ -63,6 +65,20 @@ message UserEventResponse {}
 
 message RequestTurnAction {
   repeated uint32 playable_cards = 1;
+}
+
+message RequestCostAction {
+  Cost cost = 1;
+  repeated CostProvider providers = 2;
+}
+
+message Cost {
+  uint32 any = 1;
+}
+
+message CostProvider {
+  uint32 entity = 1;
+  Cost provided = 2;
 }
 
 message HandCard {
@@ -80,3 +96,7 @@ message PlayCard {
 }
 
 message EndTurn {}
+
+message PayCost {
+  repeated uint32 providers = 1;
+}

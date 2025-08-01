@@ -35,6 +35,22 @@ pub enum Prototype {
     Faith(FaithPrototype),
 }
 
+impl Prototype {
+    pub fn card_id(&self) -> CardId {
+        match self {
+            Prototype::Order(order) => order.card_id,
+            Prototype::Faith(faith) => faith.card_id,
+        }
+    }
+
+    pub fn cost(&self) -> Option<u32> {
+        match self {
+            Prototype::Order(order) => Some(order.cost),
+            Prototype::Faith(_) => None, // 信念卡没有费用
+        }
+    }
+}
+
 /// 指令卡牌
 #[derive(Builder)]
 #[builder(on(String, into))]
@@ -44,7 +60,7 @@ pub struct OrderPrototype {
     pub card_id: CardId,
     pub name: String,
     pub description: String,
-
+    pub cost: u32,
 }
 
 impl<S: order_prototype_builder::State> OrderPrototypeBuilder<S> {

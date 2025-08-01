@@ -51,16 +51,20 @@ export interface GameState {
 export interface RequestUserEvent {
   readonly seqnum: Long;
   readonly timeout: number;
-  readonly eventType?: { readonly $case: "turnAction"; readonly value: RequestTurnAction } | undefined;
+  readonly eventType?: { readonly $case: "turnAction"; readonly value: RequestTurnAction } | {
+    readonly $case: "costAction";
+    readonly value: RequestCostAction;
+  } | undefined;
 }
 
 export interface UserEvent {
   readonly seqnum: Long;
   readonly roomId: Long;
-  readonly eventType?: { readonly $case: "playCard"; readonly value: PlayCard } | {
-    readonly $case: "endTurn";
-    readonly value: EndTurn;
-  } | undefined;
+  readonly eventType?:
+    | { readonly $case: "playCard"; readonly value: PlayCard }
+    | { readonly $case: "endTurn"; readonly value: EndTurn }
+    | { readonly $case: "payCost"; readonly value: PayCost }
+    | undefined;
 }
 
 export interface UserEventResponse {
@@ -68,6 +72,20 @@ export interface UserEventResponse {
 
 export interface RequestTurnAction {
   readonly playableCards: readonly number[];
+}
+
+export interface RequestCostAction {
+  readonly cost: Cost | undefined;
+  readonly providers: readonly CostProvider[];
+}
+
+export interface Cost {
+  readonly any: number;
+}
+
+export interface CostProvider {
+  readonly entity: number;
+  readonly provided: Cost | undefined;
 }
 
 export interface HandCard {
@@ -85,6 +103,10 @@ export interface PlayCard {
 }
 
 export interface EndTurn {
+}
+
+export interface PayCost {
+  readonly providers: readonly number[];
 }
 
 function createBaseJoinRoomRequest(): JoinRoomRequest {
@@ -509,6 +531,9 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
       case "turnAction":
         RequestTurnAction.encode(message.eventType.value, writer.uint32(26).fork()).join();
         break;
+      case "costAction":
+        RequestCostAction.encode(message.eventType.value, writer.uint32(34).fork()).join();
+        break;
     }
     return writer;
   },
@@ -544,6 +569,14 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
           message.eventType = { $case: "turnAction", value: RequestTurnAction.decode(reader, reader.uint32()) };
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.eventType = { $case: "costAction", value: RequestCostAction.decode(reader, reader.uint32()) };
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -566,6 +599,12 @@ export const RequestUserEvent: MessageFns<RequestUserEvent> = {
       case "turnAction": {
         if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
           message.eventType = { $case: "turnAction", value: RequestTurnAction.fromPartial(object.eventType.value) };
+        }
+        break;
+      }
+      case "costAction": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "costAction", value: RequestCostAction.fromPartial(object.eventType.value) };
         }
         break;
       }
@@ -592,6 +631,9 @@ export const UserEvent: MessageFns<UserEvent> = {
         break;
       case "endTurn":
         EndTurn.encode(message.eventType.value, writer.uint32(34).fork()).join();
+        break;
+      case "payCost":
+        PayCost.encode(message.eventType.value, writer.uint32(42).fork()).join();
         break;
     }
     return writer;
@@ -636,6 +678,14 @@ export const UserEvent: MessageFns<UserEvent> = {
           message.eventType = { $case: "endTurn", value: EndTurn.decode(reader, reader.uint32()) };
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.eventType = { $case: "payCost", value: PayCost.decode(reader, reader.uint32()) };
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -666,6 +716,12 @@ export const UserEvent: MessageFns<UserEvent> = {
       case "endTurn": {
         if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
           message.eventType = { $case: "endTurn", value: EndTurn.fromPartial(object.eventType.value) };
+        }
+        break;
+      }
+      case "payCost": {
+        if (object.eventType?.value !== undefined && object.eventType?.value !== null) {
+          message.eventType = { $case: "payCost", value: PayCost.fromPartial(object.eventType.value) };
         }
         break;
       }
@@ -762,6 +818,170 @@ export const RequestTurnAction: MessageFns<RequestTurnAction> = {
   fromPartial<I extends Exact<DeepPartial<RequestTurnAction>, I>>(object: I): RequestTurnAction {
     const message = createBaseRequestTurnAction() as any;
     message.playableCards = object.playableCards?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseRequestCostAction(): RequestCostAction {
+  return { cost: undefined, providers: [] };
+}
+
+export const RequestCostAction: MessageFns<RequestCostAction> = {
+  encode(message: RequestCostAction, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cost !== undefined) {
+      Cost.encode(message.cost, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.providers) {
+      CostProvider.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestCostAction {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRequestCostAction() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.cost = Cost.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.providers.push(CostProvider.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<RequestCostAction>, I>>(base?: I): RequestCostAction {
+    return RequestCostAction.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RequestCostAction>, I>>(object: I): RequestCostAction {
+    const message = createBaseRequestCostAction() as any;
+    message.cost = (object.cost !== undefined && object.cost !== null) ? Cost.fromPartial(object.cost) : undefined;
+    message.providers = object.providers?.map((e) => CostProvider.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseCost(): Cost {
+  return { any: 0 };
+}
+
+export const Cost: MessageFns<Cost> = {
+  encode(message: Cost, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.any !== 0) {
+      writer.uint32(8).uint32(message.any);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Cost {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCost() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.any = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<Cost>, I>>(base?: I): Cost {
+    return Cost.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Cost>, I>>(object: I): Cost {
+    const message = createBaseCost() as any;
+    message.any = object.any ?? 0;
+    return message;
+  },
+};
+
+function createBaseCostProvider(): CostProvider {
+  return { entity: 0, provided: undefined };
+}
+
+export const CostProvider: MessageFns<CostProvider> = {
+  encode(message: CostProvider, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.entity !== 0) {
+      writer.uint32(8).uint32(message.entity);
+    }
+    if (message.provided !== undefined) {
+      Cost.encode(message.provided, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CostProvider {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCostProvider() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.entity = reader.uint32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.provided = Cost.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<CostProvider>, I>>(base?: I): CostProvider {
+    return CostProvider.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CostProvider>, I>>(object: I): CostProvider {
+    const message = createBaseCostProvider() as any;
+    message.entity = object.entity ?? 0;
+    message.provided = (object.provided !== undefined && object.provided !== null)
+      ? Cost.fromPartial(object.provided)
+      : undefined;
     return message;
   },
 };
@@ -958,6 +1178,64 @@ export const EndTurn: MessageFns<EndTurn> = {
   },
   fromPartial<I extends Exact<DeepPartial<EndTurn>, I>>(_: I): EndTurn {
     const message = createBaseEndTurn() as any;
+    return message;
+  },
+};
+
+function createBasePayCost(): PayCost {
+  return { providers: [] };
+}
+
+export const PayCost: MessageFns<PayCost> = {
+  encode(message: PayCost, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    writer.uint32(10).fork();
+    for (const v of message.providers) {
+      writer.uint32(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PayCost {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePayCost() as any;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag === 8) {
+            message.providers.push(reader.uint32());
+
+            continue;
+          }
+
+          if (tag === 10) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.providers.push(reader.uint32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<PayCost>, I>>(base?: I): PayCost {
+    return PayCost.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PayCost>, I>>(object: I): PayCost {
+    const message = createBasePayCost() as any;
+    message.providers = object.providers?.map((e) => e) || [];
     return message;
   },
 };

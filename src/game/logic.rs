@@ -3,8 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
+    card::REGISTRY,
     game::{action::*, card::*, player::*, room::*, state::*, user::*},
-    grpc::RequestTurnAction,
+    grpc::{Cost, CostProvider, RequestCostAction, RequestTurnAction},
     system::{Entity, Query, exact, has},
 };
 
@@ -37,7 +38,7 @@ impl Room {
         self.perform(StartTurn { player });
         self.perform(DrawCards { player, count: 1 });
 
-        while self.read(|world| {
+        'turn: while self.read(|world| {
             world
                 .resource::<TurnTimer>()
                 .map(|timer| !timer.0.remaining().is_zero())
@@ -51,19 +52,38 @@ impl Room {
             });
             let action = self
                 .request_user_event(player, RequestTurnAction { playable_cards })
-                .await?
-                .unwrap_or(TurnAction::EndTurn(Default::default()));
+                .await?;
             match action {
-                TurnAction::PlayCard(play_card) => {
+                Some(TurnAction::PlayCard(play_card)) => {
                     let card = Entity::from(play_card.entity);
-                    let Some(card_id) = self.read(|world| card.get::<CardId>(world).copied())
-                    else {
-                        continue; // 如果获取卡牌 ID 失败，继续等待
-                    };
-                    self.perform(PlayCard { player, card });
-                    self.perform(ExecuteCard { player, card_id });
+                    if let Some(card_id) = self.read(|world| card.get::<CardId>(world).copied())
+                        && let Some(prototype) = REGISTRY.cards.get(&card_id)
+                        && let Some(cost) = prototype.cost()
+                    {
+                        if cost > 0 {
+                            let providers = self.read(|world| {
+                                world
+                                    .query(exact(Faith(player)))
+                                    .map(|(e, _)| CostProvider {
+                                        entity: e.id(),
+                                        provided: Some(Cost { any: 1 }),
+                                    })
+                                    .collect::<Vec<_>>()
+                            });
+                            let cost = Some(Cost { any: cost });
+                            let Some(_r) = self
+                                .request_user_event(player, RequestCostAction { cost, providers })
+                                .await?
+                            else {
+                                break 'turn;
+                            };
+                        }
+
+                        self.perform(PlayCard { player, card });
+                        self.perform(ExecuteCard { player, card_id });
+                    }
                 }
-                TurnAction::EndTurn(_) => break,
+                Some(TurnAction::EndTurn(_)) | None => break 'turn,
             }
         }
 
